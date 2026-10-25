@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { toLoginEmail } from '../lib/kekeLogin'
 
@@ -35,6 +35,7 @@ export default function Login() {
         {error && <div className="error">{error}</div>}
         <button disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
       </form>
+      <p className="center">New student? <Link to="/signup">Create an account</Link></p>
     </div>
   )
 }
