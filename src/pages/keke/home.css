@@ -1,0 +1,70 @@
+.keke-app {
+  min-height: 100vh;
+  background: #f4f7ff;
+  color: #203f91;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 72px;
+}
+.keke-hero {
+  min-height: 260px;
+  background: #243f8d;
+  color: #fff;
+  padding: 48px 24px 28px;
+}
+.keke-hero-top { display: flex; align-items: center; gap: 18px; }
+.keke-online-toggle {
+  flex: 0 0 78px;
+  width: 78px;
+  height: 48px;
+  padding: 5px;
+  margin: 0;
+  border: 0;
+  border-radius: 30px;
+  background: #6478ad;
+  display: flex;
+  align-items: center;
+  line-height: 1;
+}
+.keke-online-toggle span {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #fff;
+  display: block;
+  transition: transform .18s ease;
+}
+.keke-online-toggle.is-online { background: #2586d9; }
+.keke-online-toggle.is-online span { transform: translateX(30px); }
+.keke-brand span { font-size: 14px; font-weight: 600; }
+.keke-brand h1 { font-size: 23px; line-height: 1.2; margin: 2px 0 0; color: #fff; }
+.keke-earnings-today { display: flex; flex-direction: column; gap: 3px; margin-top: 18px; }
+.keke-earnings-today span { font-size: 14px; font-weight: 600; }
+.keke-earnings-today strong { font-family: Georgia, 'Times New Roman', serif; font-size: 44px; line-height: 1.05; color: #c6dcff; letter-spacing: -1px; }
+.keke-content { width: 100%; max-width: 720px; margin: 0 auto; padding: 30px 20px 24px; flex: 1; }
+.keke-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.keke-stat { min-height: 84px; background: #fff; border-radius: 22px; display: flex; flex-direction: column; justify-content: center; align-items: center; box-shadow: 0 5px 20px rgba(35, 62, 130, .04); }
+.keke-stat span { font-size: 14px; }
+.keke-stat strong { font-family: Georgia, 'Times New Roman', serif; font-size: 27px; line-height: 1.15; }
+.keke-hint { margin-top: 46px; background: #dceaff; border-radius: 20px; padding: 17px 16px 15px; display: flex; flex-direction: column; gap: 2px; color: #21418e; }
+.keke-hint span { font-size: 14px; }
+.keke-hint strong { font-size: 17px; line-height: 1.25; }
+.keke-hint.offline { background: #fff0d6; color: #7a4a00; }
+.keke-data-note { margin-top: 24px; color: #6a7898; font-size: 11px; line-height: 1.4; }
+.keke-bottom-nav { position: fixed; z-index: 5; bottom: 0; left: 0; right: 0; min-height: 72px; display: grid; grid-template-columns: repeat(4, 1fr); align-items: center; background: #fff; box-shadow: 0 -4px 18px rgba(28, 51, 106, .05); padding: 0 max(8px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(8px, env(safe-area-inset-left)); }
+.keke-bottom-nav button { background: transparent; color: #183a8d; border: 0; border-radius: 0; margin: 0; padding: 12px 3px; height: auto; line-height: 1.2; font-size: 15px; font-weight: 500; }
+.keke-bottom-nav button.active { color: #2865f5; font-weight: 700; }
+.keke-tab-placeholder { padding-top: 34px; }
+.keke-tab-placeholder h2 { font-size: 24px; }
+.keke-tab-placeholder p { color: #657392; line-height: 1.5; }
+.keke-signout { max-width: 220px; }
+@media (min-width: 760px) {
+  .keke-app { max-width: 480px; margin: 0 auto; box-shadow: 0 0 45px rgba(30, 55, 110, .1); }
+  .keke-bottom-nav { left: 50%; right: auto; width: min(480px, 100%); transform: translateX(-50%); }
+}
+@media (max-width: 360px) {
+  .keke-hero { padding-left: 18px; padding-right: 18px; }
+  .keke-brand h1 { font-size: 21px; }
+  .keke-stats { gap: 8px; }
+  .keke-stat { border-radius: 17px; }
+}

@@ -34,14 +34,16 @@ export default function StudentHome() {
       {rides === null && <p className="muted">Loading…</p>}
       {rides && rides.length === 0 && <div className="card muted">No rides yet. Book your first one.</div>}
       {rides && rides.map((r) => (
-        <div className="card row" key={r.id}>
-          <span>
-            {r.from?.name} to {r.to?.name}
-            <br />
-            <span className="muted">{new Date(r.created_at).toLocaleDateString()} · {r.status}</span>
-          </span>
-          <span className="badge">₦{r.fare}</span>
-        </div>
+        <Link className="plain" to={`/student/ticket/${r.id}`} key={r.id}>
+          <div className="card row">
+            <span>
+              {r.from?.name} to {r.to?.name}
+              <br />
+              <span className="muted">{new Date(r.created_at).toLocaleDateString()} · {r.status}</span>
+            </span>
+            <span className="badge">₦{r.fare}</span>
+          </div>
+        </Link>
       ))}
     </Layout>
   )

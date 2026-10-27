@@ -6,7 +6,10 @@ import SignUp from './pages/SignUp.jsx'
 import StudentHome from './pages/student/Home.jsx'
 import ChooseType from './pages/student/ChooseType.jsx'
 import BookFlow from './pages/student/BookFlow.jsx'
+import Ticket from './pages/student/Ticket.jsx'
+import Verify from './pages/student/Verify.jsx'
 import KekeHome from './pages/keke/Home.jsx'
+import KekeRequest from './pages/keke/Request.jsx'
 import AdminHome from './pages/admin/Home.jsx'
 import RegisterKeke from './pages/admin/RegisterKeke.jsx'
 
@@ -19,6 +22,7 @@ function RoleHome() {
 }
 
 const student = (el) => <ProtectedRoute roles={['student']}>{el}</ProtectedRoute>
+const keke = (el) => <ProtectedRoute roles={['keke']}>{el}</ProtectedRoute>
 
 export default function App() {
   return (
@@ -30,7 +34,10 @@ export default function App() {
       <Route path="/student/book" element={student(<ChooseType />)} />
       <Route path="/student/book/drop" element={student(<BookFlow mode="drop" />)} />
       <Route path="/student/book/along" element={student(<BookFlow mode="along" />)} />
-      <Route path="/keke" element={<ProtectedRoute roles={['keke']}><KekeHome /></ProtectedRoute>} />
+      <Route path="/student/ticket/:rideId" element={student(<Ticket />)} />
+      <Route path="/student/verify/:rideId" element={student(<Verify />)} />
+      <Route path="/keke" element={keke(<KekeHome />)} />
+      <Route path="/keke/request" element={keke(<KekeRequest />)} />
       <Route path="/admin" element={<ProtectedRoute roles={['admin']}><AdminHome /></ProtectedRoute>} />
       <Route path="/admin/register-keke" element={<ProtectedRoute roles={['admin']}><RegisterKeke /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
