@@ -37,3 +37,54 @@ button:disabled { opacity: .6; }
 .code { font: 700 44px Poppins, system-ui; letter-spacing: 8px; color: var(--blue); }
 .rowline { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; }
 a.plain { text-decoration: none; color: inherit; }
+
+/* ---- CampusMap markers (global so StationMap markers stay styled) ---- */
+/* maplibre-gl positions markers with an inline `transform`, so selection
+   and pulse effects use box-shadow / background, never `transform`. */
+.km-keke {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #dc2626;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.35);
+  border: 2px solid #fff;
+}
+.km-keke svg { width: 20px; height: 20px; }
+.km-keke-hi { background: #16a34a; }
+.km-keke-hi::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 3px solid #16a34a;
+  animation: km-pulse 1.6s ease-out infinite;
+}
+@keyframes km-pulse {
+  0% { transform: scale(0.75); opacity: 0.9; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+.km-user {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #2563eb;
+  border: 3px solid #fff;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.5);
+}
+.km-point-sel {
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.35), 0 4px 12px rgba(15, 23, 42, 0.3);
+}
+.km-route-note {
+  position: absolute;
+  left: 10px;
+  bottom: 26px;
+  z-index: 5;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 8px;
+  padding: 4px 8px;
+  pointer-events: none;
+}
