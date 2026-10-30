@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Layout from '../../components/Layout.jsx'
+import CampusMap from '../../components/CampusMap.jsx'
 import { supabase } from '../../lib/supabase'
 
 // One screen flow used by both Drop and Along.
@@ -26,7 +27,7 @@ export default function BookFlow({ mode }) {
     async function loadLocations() {
       const { data, error } = await supabase
         .from('locations')
-        .select('id, name, kind')
+        .select('id, name, kind, lat, lng')
         .eq('mode', mode)
         .eq('active', true)
         .order('name')
@@ -118,6 +119,16 @@ export default function BookFlow({ mode }) {
   const tos = locations.filter(
     (l) => l.kind === 'destination' && l.name !== from?.name
   )
+
+  // Map points for the current step (only locations with coordinates show).
+  const hasCoords = (l) =>
+    l.lat !== null && l.lng !== null && !(l.lat === 0 && l.lng === 0)
+  const mapPoints =
+    step === 2 && to
+      ? [from, to].filter(hasCoords)
+      : step === 2
+        ? [from, ...tos].filter(hasCoords)
+        : froms.filter(hasCoords)
 
   async function pickDestination(location) {
     setTo(location)
@@ -241,7 +252,35 @@ export default function BookFlow({ mode }) {
               {activeRide.booking_code && (
                 <p>Booking code: <strong>{activeRide.booking_code}</strong></p>
               )}
-              <Link to="/student">Return to Home</Link>
+
+              <p>
+                <strong>
+                  Fare: ₦{Number(activeRide.fare ?? fare).toLocaleString('en-NG')}
+                </strong>
+              </p>
+
+              <Link
+                className="btn"
+                to={`/student/pay/${activeRide.id}`}
+              >
+                Pay now with Paystack
+              </Link>
+
+              <div style={{ marginTop: 12 }}>
+                <Link to={`/student/verify/${activeRide.id}`}>
+                  Show Keke I booked
+                </Link>
+              </div>
+
+              <div style={{ marginTop: 12 }}>
+                <Link to={`/student/ride/${activeRide.id}`}>
+                  Open live ride screen
+                </Link>
+              </div>
+
+              <div style={{ marginTop: 12 }}>
+                <Link to="/student">Return to Home</Link>
+              </div>
             </div>
           )}
 
@@ -289,6 +328,12 @@ export default function BookFlow({ mode }) {
               : 'You must be at the station to be picked up.'}
           </p>
 
+          <CampusMap
+            points={from ? [from] : mapPoints}
+            height={180}
+            onSelect={(point) => setFrom(point)}
+          />
+
           {froms.map((location) => (
             <button
               key={location.id}
@@ -329,6 +374,17 @@ export default function BookFlow({ mode }) {
           </p>
 
           <h2>Where are you going?</h2>
+
+          <CampusMap
+            points={mapPoints}
+            route={to && hasCoords(from) && hasCoords(to) ? { from, to } : null}
+            height={180}
+            onSelect={(point) => {
+              if (point.id !== from?.id && point.kind === 'destination') {
+                pickDestination(point)
+              }
+            }}
+          />
 
           {tos.map((location) => (
             <button

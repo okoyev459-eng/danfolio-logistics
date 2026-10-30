@@ -26,15 +26,16 @@ export default function Login() {
   return (
     <div className="page">
       <h1>Danfolio Logistics</h1>
-      <p>Sign in. Keke riders use their keke number.</p>
+      <p>Sign in. Keke riders use their keke number instead of an email.</p>
       <form className="card" onSubmit={handleSubmit}>
-        <label>Email or keke number</label>
+        <label>Student email or keke number</label>
         <input value={id} onChange={(e) => setId(e.target.value)} required />
         <label>Password</label>
         <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         {error && <div className="error">{error}</div>}
         <button disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
       </form>
+      <p className="center"><Link to="/forgot-password">Forgot password?</Link></p>
       <p className="center">New student? <Link to="/signup">Create an account</Link></p>
     </div>
   )

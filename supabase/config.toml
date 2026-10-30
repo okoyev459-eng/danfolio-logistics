@@ -425,3 +425,65 @@ entrypoint = "./functions/create-ride/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/create-ride/*.html" ]
+
+[functions.complete-trip]
+enabled = true
+# Callers send their signed-in user JWT; the function also re-validates it
+# server-side and verifies the caller is the ride's assigned rider.
+verify_jwt = true
+entrypoint = "./functions/complete-trip/index.ts"
+
+[functions.mark-arrived]
+enabled = true
+# Rider-signed JWT re-validated server-side; only the assigned keke may mark
+# its own ride arrived (paid -> arrived).
+verify_jwt = true
+entrypoint = "./functions/mark-arrived/index.ts"
+
+[functions.start-trip]
+enabled = true
+# Rider-signed JWT re-validated server-side; booking code checked against the
+# ride, ticket guarded on 'unused' so it can never be replayed.
+verify_jwt = true
+entrypoint = "./functions/start-trip/index.ts"
+
+[functions.cancel-ride]
+enabled = true
+# Student-signed JWT re-validated server-side; only the ride's own student may
+# cancel. Paid rides route to the server-only refund-ride function.
+verify_jwt = true
+entrypoint = "./functions/cancel-ride/index.ts"
+
+[functions.admin-refund]
+enabled = true
+# Admin-signed JWT re-validated server-side (profiles.role must be 'admin')
+# before the service-to-service call to refund-ride is made.
+verify_jwt = true
+entrypoint = "./functions/admin-refund/index.ts"
+
+[functions.match-tick]
+enabled = true
+# Server-to-server maintenance tick. The caller must send
+# `Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>` (the same pattern
+# refund-ride uses); the function re-checks it against its own env value.
+# The service-role key is itself a valid JWT, so gateway verification stays ON.
+verify_jwt = true
+entrypoint = "./functions/match-tick/index.ts"
+# NOTE: Edge Functions have NO native scheduler (CLI v2.122.0 has no
+# --schedule flag; the Management API has no schedule endpoint). The sanctioned
+# scheduler is Supabase Cron (pg_cron + pg_net) with the service key in Vault,
+# configured AFTER deploy:
+#   1. Dashboard -> Integrations -> Cron -> enable pg_cron (and enable pg_net)
+#   2. select vault.create_secret('<SERVICE_ROLE_KEY>',
+#        'match-tick-service-role', 'match-tick cron job key');
+#   3. select cron.schedule('match-tick', '15 seconds',
+#        $$ select net.http_post(
+#             url := 'https://<PROJECT_REF>.supabase.co/functions/v1/match-tick',
+#             headers := jsonb_build_object(
+#               'Content-Type', 'application/json',
+#               'Authorization', 'Bearer ' || (select decrypted_secret
+#                 from vault.decrypted_secrets where name = 'match-tick-service-role')),
+#             body := '{}'::jsonb,
+#             timeout_milliseconds := 10000) $$);
+# Sub-minute schedules need PostgreSQL >= 15.1.1.61 (this project: 17.11).
+# Do NOT put the real service-role key in this file — it lives in Vault only.
