@@ -131,6 +131,9 @@ export default function KekeHome() {
   const [earnings, setEarnings] = useState(null)
   const [earnPeriod, setEarnPeriod] = useState('week')
   const [boardCode, setBoardCode] = useState('')
+  // 'map' = the full-screen mockup trip views (K6/K7/K8); 'card' = the
+  // compact trip card. The back button on the trip screens returns here.
+  const [tripView, setTripView] = useState('map')
 
   useEffect(() => {
     if (!userId) return
@@ -565,6 +568,7 @@ export default function KekeHome() {
       setNotice('Ride accepted! The booking has been assigned to you.')
       setOnline(false)
       setOnlineSince(null)
+      setTripView('map')
       setRider((current) => current ? { ...current, status: 'on_trip' } : current)
       return
     }
@@ -645,6 +649,7 @@ export default function KekeHome() {
     )
     if (result) {
       setActiveTrip(null)
+      setTripView('map')
       setRider((current) => current
         ? { ...current, status: 'online', last_seen: new Date().toISOString() }
         : current)
@@ -886,11 +891,121 @@ export default function KekeHome() {
     const ticket = activeTrip.tickets?.[0] ?? null
     const studentName = tripStudent?.full_name ?? 'Student'
 
+    // Compact trip card — the destination of the back button on the
+    // full-screen trip views. Every action is available here too.
+    if (tripView === 'card') {
+      const paidCard = ['paid', 'arrived', 'on_trip'].includes(activeTrip.status)
+      return (
+        <main className="keke-app">
+          <header className="keke-bar">
+            <span className="keke-bar-title">Current trip</span>
+            <button
+              type="button"
+              className="keke-bar-btn"
+              onClick={() => setTripView('map')}
+            >
+              Open trip screen
+            </button>
+          </header>
+
+          {error && <div className="keke-hint offline" role="alert">{error}</div>}
+          {notice && <div className="keke-hint" role="status">{notice}</div>}
+
+          <section className="keke-content">
+            <div className="keke-hint">
+              <span>
+                <strong>
+                  {tripFrom?.name ?? 'Pick-up'} → {tripTo?.name ?? 'Destination'}
+                </strong>
+                <span>
+                  Booking {activeTrip.booking_code} · ₦
+                  {Number(activeTrip.fare).toLocaleString()}
+                </span>
+                {activeTrip.status === 'accepted' && (
+                  <span>
+                    Waiting for the student’s payment. Mark arrival once you
+                    reach the pickup point.
+                  </span>
+                )}
+                {activeTrip.status === 'paid' && (
+                  <span>Head to the pickup point, then mark your arrival.</span>
+                )}
+                {activeTrip.status === 'arrived' && (
+                  <span>
+                    Student is boarding. Ask for the 4-digit booking code and
+                    start the trip.
+                  </span>
+                )}
+                {activeTrip.status === 'on_trip' && (
+                  <span>
+                    {paidCard ? 'Paid by student · ticket issued · ' : ''}
+                    Heading to {tripTo?.name ?? 'the destination'}.
+                  </span>
+                )}
+              </span>
+            </div>
+
+            {tripStudent?.phone && (
+              <a className="kr-call" href={`tel:${tripStudent.phone}`} style={{ marginTop: 10 }}>
+                Call student
+              </a>
+            )}
+
+            {(activeTrip.status === 'accepted' || activeTrip.status === 'paid') && (
+              <button type="button" className="ko-accept" disabled={busy} onClick={markArrived}>
+                {busy ? 'Please wait…' : 'I have arrived'}
+              </button>
+            )}
+
+            {activeTrip.status === 'arrived' && (
+              <>
+                <CodeBoxes
+                  value={boardCode}
+                  onChange={setBoardCode}
+                  onSubmit={startTrip}
+                  busy={busy}
+                />
+                <button
+                  type="button"
+                  className="ko-accept"
+                  disabled={busy || boardCode.length !== 4}
+                  onClick={startTrip}
+                >
+                  {busy ? 'Please wait…' : 'Start trip'}
+                </button>
+              </>
+            )}
+
+            {activeTrip.status === 'on_trip' && (
+              <>
+                {tripProgress !== null && (
+                  <div className="bk-progress" aria-hidden="true">
+                    <i style={{ width: `${tripProgress}%` }} />
+                  </div>
+                )}
+                <button type="button" className="ko-accept" disabled={busy} onClick={completeTrip}>
+                  {busy ? 'Please wait…' : 'Complete trip'}
+                </button>
+              </>
+            )}
+          </section>
+        </main>
+      )
+    }
+
     // K7 — Verify passenger (arrived at pick-up)
     if (activeTrip.status === 'arrived') {
       return (
         <main className="keke-app keke-trip-app">
           <header className="keke-trip-head">
+            <button
+              type="button"
+              className="keke-back-float"
+              onClick={() => setTripView('card')}
+              aria-label="Back to trip card"
+            >
+              ←
+            </button>
             <div className="kr-avatar" aria-hidden="true">
               {studentName.charAt(0).toUpperCase()}
             </div>
@@ -972,14 +1087,24 @@ export default function KekeHome() {
           />
         </div>
 
-        <div className="keke-trip-pill">
-          {headingTo
-            ? tripEtaMinutes
-              ? `${tripEtaMinutes} min left`
-              : 'On trip'
-            : tripEtaMinutes
-              ? `${tripEtaMinutes} min to pick-up`
-              : 'Head to pick-up'}
+        <div className="keke-trip-top">
+          <button
+            type="button"
+            className="keke-back"
+            onClick={() => setTripView('card')}
+            aria-label="Back to trip card"
+          >
+            ←
+          </button>
+          <div className="keke-trip-pill">
+            {headingTo
+              ? tripEtaMinutes
+                ? `${tripEtaMinutes} min left`
+                : 'On trip'
+              : tripEtaMinutes
+                ? `${tripEtaMinutes} min to pick-up`
+                : 'Head to pick-up'}
+          </div>
         </div>
 
         <section className="keke-trip-sheet" role="region" aria-label="Trip details">
@@ -1177,6 +1302,9 @@ export default function KekeHome() {
         </section>
       ) : tab === 'Trips' ? (
         <section className="keke-content keke-tab-placeholder">
+          <button type="button" className="keke-tab-back" onClick={() => setTab('Home')}>
+            ← Home
+          </button>
           <h2>Trips</h2>
           {trips === null && <p>Loading…</p>}
           {trips && trips.length === 0 && <p>No trips yet.</p>}
@@ -1196,6 +1324,9 @@ export default function KekeHome() {
         </section>
       ) : tab === 'Earnings' ? (
         <section className="keke-content keke-tab-placeholder">
+          <button type="button" className="keke-tab-back" onClick={() => setTab('Home')}>
+            ← Home
+          </button>
           <h2>Earnings</h2>
 
           <div className="keke-period" role="tablist" aria-label="Earnings period">
@@ -1285,6 +1416,9 @@ export default function KekeHome() {
         </section>
       ) : (
         <section className="keke-content keke-tab-placeholder">
+          <button type="button" className="keke-tab-back" onClick={() => setTab('Home')}>
+            ← Home
+          </button>
           <header className="keke-profile-head">
             <div className="kr-avatar" aria-hidden="true">
               K

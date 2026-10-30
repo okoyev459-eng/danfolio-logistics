@@ -335,6 +335,96 @@
   opacity: 0.85;
   margin: 0;
 }
+
+/* ---- Back navigation -------------------------------------------------- */
+/* Trip-card header (back destination from the full-screen trip views) */
+.keke-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 20px 20px 0;
+}
+.keke-bar-title {
+  font-family: Poppins, Inter, sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e3a8a;
+}
+.keke-bar-btn {
+  display: inline-block;
+  width: auto;
+  height: 40px;
+  line-height: 38px;
+  margin: 0;
+  padding: 0 16px;
+  border-radius: 20px;
+  border: 2px solid #2563eb;
+  background: #fff;
+  color: #1e3a8a;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* Round white back buttons (mockup pill language) */
+.keke-back,
+.keke-back-float {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #1e3a8a;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 44px;
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.22);
+}
+.keke-trip-top {
+  position: absolute;
+  top: calc(16px + env(safe-area-inset-top));
+  left: 16px;
+  right: 16px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.keke-trip-top .keke-trip-pill {
+  position: static;
+}
+.keke-back-float {
+  position: absolute;
+  top: calc(16px + env(safe-area-inset-top));
+  left: 16px;
+  z-index: 35;
+}
+
+/* "← Home" link on the tab screens */
+.keke-tab-back {
+  display: inline-block;
+  width: auto;
+  height: auto;
+  margin: 0 0 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #1e3a8a;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+}
 @media (min-width: 760px) {
   .keke-app { max-width: 480px; margin: 0 auto; box-shadow: 0 0 45px rgba(30, 55, 110, .1); }
   .keke-bottom-nav { left: 50%; right: auto; width: min(480px, 100%); transform: translateX(-50%); }
