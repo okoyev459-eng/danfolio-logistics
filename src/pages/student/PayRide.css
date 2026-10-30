@@ -1,0 +1,77 @@
+/* Slide-to-pay (mockup screen 7) — a real gesture that starts the real
+   Paystack checkout. Nothing is simulated: releasing the knob past the
+   threshold calls the same payNow() the button used to. */
+
+.pay-slide {
+  position: relative;
+  height: 56px;
+  border-radius: 20px;
+  background: #dbeafe;
+  border: 2px solid #2563eb;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  margin-top: 18px;
+  cursor: grab;
+}
+.pay-slide:active { cursor: grabbing; }
+.pay-slide:focus-visible {
+  outline: 3px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.pay-slide-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: Poppins, system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 16px;
+  color: #1e3a8a;
+  pointer-events: none;
+  padding-left: 52px; /* visually centred against the knob */
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.pay-slide-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: #2563eb;
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.pay-slide-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(30, 58, 138, 0.35);
+  pointer-events: none;
+}
+.pay-slide.done .pay-slide-knob { background: #16a34a; }
+
+.pay-slide:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.pay-hint {
+  text-align: center;
+  font-size: 13px;
+  opacity: 0.75;
+  margin: 8px 0 0;
+}

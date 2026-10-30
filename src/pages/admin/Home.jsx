@@ -1,21 +1,19 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import Layout from '../../components/Layout.jsx'
+import { useEffect, useMemo, useState } from 'react'
+import AdminLayout from '../../components/AdminLayout.jsx'
+import CampusMap from '../../components/CampusMap.jsx'
 import { supabase } from '../../lib/supabase'
+import { validCoord } from '../../lib/geo'
 
-// Admin home — dashboard overview + links to every management screen.
+// Admin overview (mockup A1 "live overview"): stat-card row, the live campus
+// map (real keke GPS rows + stations), and the list of active rides.
 // Stats come from the admin's own RLS reads (is_admin() policies).
-const nav = [
-  { to: '/admin/rides', label: 'Rides & bookings', desc: 'Live bookings, cancel, refund' },
-  { to: '/admin/kekes', label: 'Keke riders', desc: 'Status, station, availability' },
-  { to: '/admin/locations', label: 'Stations & points', desc: 'Pickups, stations, destinations' },
-  { to: '/admin/fares', label: 'Fares', desc: 'Fixed prices per route' },
-  { to: '/admin/reports', label: 'Reports', desc: 'Student reports to resolve' },
-  { to: '/admin/register-keke', label: 'Register a keke', desc: 'Create a rider login' },
-]
+const ACTIVE = ['searching', 'accepted', 'paid', 'arrived', 'on_trip']
 
 export default function AdminHome() {
   const [stats, setStats] = useState(null)
+  const [rides, setRides] = useState([])
+  const [kekes, setKekes] = useState([])
+  const [stations, setStations] = useState([])
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -26,37 +24,54 @@ export default function AdminHome() {
       today.setHours(0, 0, 0, 0)
       const start = today.toISOString()
 
-      const [ridesRes, kekesRes, paymentsRes, reportsRes, studentsRes] =
+      const [ridesRes, kekesRes, paymentsRes, reportsRes, studentsRes, locationsRes] =
         await Promise.all([
-          supabase.from('rides').select('id, status, fare, created_at'),
-          supabase.from('kekes').select('id, status'),
+          supabase
+            .from('rides')
+            .select(`
+              id, status, fare, created_at,
+              from:locations!rides_from_id_fkey(name),
+              to:locations!rides_to_id_fkey(name),
+              student:profiles!rides_student_id_fkey(full_name),
+              keke:kekes!rides_keke_id_fkey(keke_number)
+            `)
+            .order('created_at', { ascending: false })
+            .limit(200),
+          supabase.from('kekes').select('id, status, lat, lng, last_seen'),
           supabase.from('payments').select('id, status, amount'),
           supabase.from('reports').select('id, status'),
           supabase.from('profiles').select('id, role').eq('role', 'student'),
+          supabase
+            .from('locations')
+            .select('id, name, lat, lng, kind')
+            .eq('kind', 'station')
+            .eq('active', true),
         ])
 
       if (!active) return
 
       const firstError =
         ridesRes.error || kekesRes.error || paymentsRes.error ||
-        reportsRes.error || studentsRes.error
+        reportsRes.error || studentsRes.error || locationsRes.error
 
       if (firstError) {
         setError(`Could not load dashboard: ${firstError.message}`)
         return
       }
 
-      const rides = ridesRes.data ?? []
-      const kekes = kekesRes.data ?? []
+      const rideRows = ridesRes.data ?? []
+      const kekeRows = kekesRes.data ?? []
       const payments = paymentsRes.data ?? []
       const reports = reportsRes.data ?? []
-      const todayRides = rides.filter((r) => r.created_at >= start)
+      const todayRides = rideRows.filter((r) => r.created_at >= start)
+
+      setRides(rideRows.filter((r) => ACTIVE.includes(r.status)))
+      setKekes(kekeRows)
+      setStations(locationsRes.data ?? [])
 
       setStats({
         ridesToday: todayRides.length,
-        activeRides: rides.filter((r) =>
-          ['searching', 'accepted', 'paid', 'arrived', 'on_trip'].includes(r.status)
-        ).length,
+        activeRides: rideRows.filter((r) => ACTIVE.includes(r.status)).length,
         completedToday: todayRides.filter((r) => r.status === 'completed').length,
         revenueToday: payments
           .filter((p) => p.status === 'success')
@@ -64,10 +79,10 @@ export default function AdminHome() {
         refundedTotal: payments
           .filter((p) => p.status === 'refunded')
           .reduce((sum, p) => sum + Number(p.amount || 0), 0),
-        ridersOnline: kekes.filter((k) => k.status === 'online').length,
-        ridersOnTrip: kekes.filter((k) => k.status === 'on_trip').length,
-        ridersOffline: kekes.filter((k) => k.status === 'offline').length,
-        ridersUnavailable: kekes.filter((k) => k.status === 'unavailable').length,
+        ridersOnline: kekeRows.filter((k) => k.status === 'online').length,
+        ridersOnTrip: kekeRows.filter((k) => k.status === 'on_trip').length,
+        ridersOffline: kekeRows.filter((k) => k.status === 'offline').length,
+        ridersUnavailable: kekeRows.filter((k) => k.status === 'unavailable').length,
         openReports: reports.filter((r) => r.status === 'open').length,
         students: (studentsRes.data ?? []).length,
       })
@@ -78,53 +93,126 @@ export default function AdminHome() {
     return () => { active = false; window.clearInterval(timer) }
   }, [])
 
-  const card = (label, value) => (
-    <div className="card row" key={label} style={{ marginBottom: 8 }}>
-      <span className="muted">{label}</span>
-      <b>{value}</b>
-    </div>
+  // Only kekes with a real GPS fix render on the map (rows with NULL coords
+  // are honestly hidden).
+  const kekeMarkers = useMemo(
+    () =>
+      kekes
+        .filter((k) => validCoord(k))
+        .map((k) => ({ id: k.id, lat: Number(k.lat), lng: Number(k.lng) })),
+    [kekes]
   )
 
+  const stationPoints = useMemo(
+    () =>
+      stations
+        .filter((s) => validCoord(s))
+        .map((s) => ({ id: s.id, name: s.name, lat: Number(s.lat), lng: Number(s.lng), kind: 'station' })),
+    [stations]
+  )
+
+  const gpsCount = kekeMarkers.length
+
   return (
-    <Layout title="Admin">
-      <h2>Dashboard</h2>
-      {error && <div className="error">{error}</div>}
+    <AdminLayout title="Overview">
+      {error && <div className="error" role="alert">{error}</div>}
       {!stats && !error && <p className="muted">Loading…</p>}
 
       {stats && (
         <>
-          <div className="fare">
-            <span>Revenue recorded today</span>
-            <b>₦{stats.revenueToday.toLocaleString()}</b>
-            <span className="badge">{stats.completedToday} trips completed today</span>
+          <div className="adm-stats">
+            <div className="adm-stat">
+              <span>Today’s rides</span>
+              <strong>{stats.ridesToday}</strong>
+            </div>
+            <div className="adm-stat">
+              <span>Active rides</span>
+              <strong>{stats.activeRides}</strong>
+            </div>
+            <div className="adm-stat">
+              <span>Kekes online</span>
+              <strong>{stats.ridersOnline}</strong>
+            </div>
+            <div className="adm-stat">
+              <span>On a trip</span>
+              <strong>{stats.ridersOnTrip}</strong>
+            </div>
+            <div className="adm-stat">
+              <span>Revenue today</span>
+              <strong>₦{stats.revenueToday.toLocaleString()}</strong>
+            </div>
+            <div className="adm-stat">
+              <span>Open reports</span>
+              <strong>{stats.openReports}</strong>
+            </div>
           </div>
 
-          <h2 style={{ marginTop: 20 }}>Today</h2>
-          {card('Rides created', stats.ridesToday)}
-          {card('Active rides (all states)', stats.activeRides)}
+          <div className="adm-grid2">
+            <section>
+              <div className="adm-map">
+                <CampusMap
+                  kekes={kekeMarkers}
+                  points={stationPoints}
+                  height="100%"
+                />
+              </div>
+              <p className="adm-legend">
+                Navy squares are kekes with a live GPS signal ({gpsCount} of{' '}
+                {kekes.length} riders). Blue pins are ride stations. Riders
+                without a location fix are hidden until they send one.
+              </p>
+            </section>
 
-          <h2 style={{ marginTop: 20 }}>Keke riders</h2>
-          {card('Online', stats.ridersOnline)}
-          {card('On a trip', stats.ridersOnTrip)}
-          {card('Unavailable', stats.ridersUnavailable)}
-          {card('Offline', stats.ridersOffline)}
+            <section className="adm-panel">
+              <h2>Active rides</h2>
+              {rides.length === 0 && (
+                <p className="muted">No active rides right now.</p>
+              )}
+              <div className="adm-table-wrap">
+                <table className="adm-table">
+                  <thead>
+                    <tr>
+                      <th>Route</th>
+                      <th>Status</th>
+                      <th>Fare</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rides.slice(0, 12).map((ride) => {
+                      const student = Array.isArray(ride.student) ? ride.student[0] : ride.student
+                      const keke = Array.isArray(ride.keke) ? ride.keke[0] : ride.keke
+                      return (
+                        <tr key={ride.id}>
+                          <td>
+                            <b>{ride.from?.name} → {ride.to?.name}</b>
+                            <div className="muted">
+                              {student?.full_name ?? 'student'}
+                              {keke && ` · keke ${keke.keke_number}`}
+                            </div>
+                          </td>
+                          <td>
+                            <span className="pill trip">
+                              {String(ride.status).replaceAll('_', ' ')}
+                            </span>
+                          </td>
+                          <td>₦{Number(ride.fare).toLocaleString()}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
 
-          <h2 style={{ marginTop: 20 }}>Overview</h2>
-          {card('Registered students', stats.students)}
-          {card('Open reports', stats.openReports)}
-          {card('Lifetime refunded (₦)', stats.refundedTotal.toLocaleString())}
+              <div className="adm-legend" style={{ marginTop: 10 }}>
+                Riders online: {stats.ridersOnline} · offline: {stats.ridersOffline}{' '}
+                · unavailable: {stats.ridersUnavailable} · students:{' '}
+                {stats.students} · lifetime refunded: ₦
+                {stats.refundedTotal.toLocaleString()}
+              </div>
+            </section>
+          </div>
         </>
       )}
-
-      <h2 style={{ marginTop: 24 }}>Manage</h2>
-      {nav.map((item) => (
-        <Link className="plain" to={item.to} key={item.to}>
-          <div className="card">
-            <b>{item.label}</b>
-            <div className="muted">{item.desc}</div>
-          </div>
-        </Link>
-      ))}
-    </Layout>
+    </AdminLayout>
   )
 }

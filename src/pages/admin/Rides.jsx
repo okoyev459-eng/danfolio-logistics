@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import Layout from '../../components/Layout.jsx'
+import AdminLayout from '../../components/AdminLayout.jsx'
 import { supabase } from '../../lib/supabase'
 
 // Admin ride & booking management — see every ride with payment/ticket,
@@ -84,17 +83,15 @@ export default function AdminRides() {
   })
 
   return (
-    <Layout title="Admin · Rides">
-      <Link to="/admin">← Dashboard</Link>
-      <h2>Rides & bookings</h2>
-
-      <div style={{ display: 'flex', gap: 8, margin: '12px 0' }}>
+    <AdminLayout title="Rides and bookings">
+      <div className="adm-chips" role="tablist" aria-label="Ride filter">
         {Object.keys(FILTERS).map((name) => (
           <button
             key={name}
             type="button"
-            className={filter === name ? '' : 'secondary'}
-            style={{ height: 40, marginTop: 0, lineHeight: '40px', fontSize: 14 }}
+            role="tab"
+            aria-selected={filter === name}
+            className={filter === name ? 'active' : ''}
             onClick={() => setFilter(name)}
           >
             {name}
@@ -105,61 +102,85 @@ export default function AdminRides() {
       {error && <div className="error" role="alert">{error}</div>}
       {notice && <div className="ok" role="status">{notice}</div>}
       {rides === null && !error && <p className="muted">Loading…</p>}
-      {rides !== null && visible.length === 0 && (
-        <div className="card muted">No rides in this view.</div>
-      )}
 
-      {visible.map((ride) => {
-        const payment = Array.isArray(ride.payments) ? ride.payments[0] : ride.payments
-        const ticket = Array.isArray(ride.tickets) ? ride.tickets[0] : ride.tickets
-        const student = Array.isArray(ride.student) ? ride.student[0] : ride.student
-        const keke = Array.isArray(ride.keke) ? ride.keke[0] : ride.keke
+      <div className="adm-panel">
+        {rides !== null && visible.length === 0 && (
+          <p className="muted">No rides in this view.</p>
+        )}
+        {visible.length > 0 && (
+          <div className="adm-table-wrap">
+            <table className="adm-table">
+              <thead>
+                <tr>
+                  <th>Route</th>
+                  <th>Student</th>
+                  <th>Keke</th>
+                  <th>Fare</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((ride) => {
+                  const payment = Array.isArray(ride.payments) ? ride.payments[0] : ride.payments
+                  const ticket = Array.isArray(ride.tickets) ? ride.tickets[0] : ride.tickets
+                  const student = Array.isArray(ride.student) ? ride.student[0] : ride.student
+                  const keke = Array.isArray(ride.keke) ? ride.keke[0] : ride.keke
 
-        return (
-          <div className="card" key={ride.id}>
-            <div className="row">
-              <b>{ride.from?.name} → {ride.to?.name}</b>
-              <span className="badge">{String(ride.status).replaceAll('_', ' ')}</span>
-            </div>
-            <p className="muted" style={{ fontSize: 14 }}>
-              {ride.mode} · ₦{Number(ride.fare).toLocaleString()} · code {ride.booking_code}
-              <br />
-              {student ? `${student.full_name ?? 'student'} (${student.matric_no ?? '—'})` : 'student —'}
-              {keke && <> · keke {keke.keke_number}</>}
-              <br />
-              {new Date(ride.created_at).toLocaleString()}
-              {payment && <> · payment {payment.status}</>}
-              {ticket && <> · ticket {ticket.ticket_no} ({ticket.status})</>}
-            </p>
+                  return (
+                    <tr key={ride.id}>
+                      <td>
+                        <b>{ride.from?.name} → {ride.to?.name}</b>
+                        <div className="muted">
+                          {ride.mode} · code {ride.booking_code}
+                          {payment && ` · payment ${payment.status}`}
+                          {ticket && ` · ticket ${ticket.ticket_no} (${ticket.status})`}
+                        </div>
+                      </td>
+                      <td>
+                        {student ? student.full_name ?? 'student' : 'student'}
+                        <div className="muted">{student?.matric_no ?? '—'}</div>
+                      </td>
+                      <td>{keke ? keke.keke_number : '—'}</td>
+                      <td>₦{Number(ride.fare).toLocaleString()}</td>
+                      <td>
+                        <span className={`pill ${ride.status === 'searching' ? 'pending' : 'trip'}`}>
+                          {String(ride.status).replaceAll('_', ' ')}
+                        </span>
+                      </td>
+                      <td className="muted">{new Date(ride.created_at).toLocaleString()}</td>
+                      <td>
+                        {['searching', 'accepted'].includes(ride.status) && (
+                          <button
+                            type="button"
+                            className="adm-btn secondary"
+                            disabled={busyId === ride.id}
+                            onClick={() => invoke('cancel-ride', ride.id, 'Cancel')}
+                          >
+                            {busyId === ride.id ? 'Working…' : 'Cancel booking'}
+                          </button>
+                        )}
 
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {['searching', 'accepted'].includes(ride.status) && (
-                <button
-                  type="button"
-                  className="secondary"
-                  style={{ marginTop: 0, width: 'auto', padding: '0 14px', height: 40, lineHeight: '40px', fontSize: 14 }}
-                  disabled={busyId === ride.id}
-                  onClick={() => invoke('cancel-ride', ride.id, 'Cancel')}
-                >
-                  {busyId === ride.id ? 'Working…' : 'Cancel booking'}
-                </button>
-              )}
-
-              {['paid', 'arrived'].includes(ride.status) && (
-                <button
-                  type="button"
-                  className="secondary"
-                  style={{ marginTop: 0, width: 'auto', padding: '0 14px', height: 40, lineHeight: '40px', fontSize: 14 }}
-                  disabled={busyId === ride.id}
-                  onClick={() => invoke('admin-refund', ride.id, 'Refund')}
-                >
-                  {busyId === ride.id ? 'Working…' : 'Refund via Paystack'}
-                </button>
-              )}
-            </div>
+                        {['paid', 'arrived'].includes(ride.status) && (
+                          <button
+                            type="button"
+                            className="adm-btn secondary"
+                            disabled={busyId === ride.id}
+                            onClick={() => invoke('admin-refund', ride.id, 'Refund')}
+                          >
+                            {busyId === ride.id ? 'Working…' : 'Refund via Paystack'}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
-        )
-      })}
-    </Layout>
+        )}
+      </div>
+    </AdminLayout>
   )
 }

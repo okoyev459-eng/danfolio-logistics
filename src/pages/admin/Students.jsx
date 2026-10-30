@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import Layout from '../../components/Layout.jsx'
+import AdminLayout from '../../components/AdminLayout.jsx'
 import { supabase } from '../../lib/supabase'
 
 // Admin student management — view registered students (spec: student and
@@ -27,37 +26,49 @@ export default function AdminStudents() {
   }, [])
 
   return (
-    <Layout title="Admin · Students">
-      <Link to="/admin">← Dashboard</Link>
-      <h2>Students</h2>
-      <p className="muted">Registered student accounts.</p>
+    <AdminLayout title="Students">
+      <p className="adm-sub">Registered student accounts.</p>
 
-      {error && <div className="error">{error}</div>}
+      {error && <div className="error" role="alert">{error}</div>}
       {rows === null && !error && <p className="muted">Loading…</p>}
-      {rows && rows.length === 0 && <div className="card muted">No students registered yet.</div>}
 
-      {(rows ?? []).map((row) => {
-        const initials = (row.full_name || '?').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()
-        return (
-          <div className="card row" key={row.id}>
-            <span style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-              {row.avatar_url
-                ? <img src={row.avatar_url} alt="" style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} />
-                : <span aria-hidden="true" style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--sky)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>{initials}</span>}
-              <span>
-                <b>{row.full_name ?? '—'}</b>
-                <br />
-                <span className="muted">
-                  {row.matric_no ?? 'no matric'}{row.phone ? ` · ${row.phone}` : ''}
-                </span>
-              </span>
-            </span>
-            <span className="muted" style={{ fontSize: 13 }}>
-              {new Date(row.created_at).toLocaleDateString()}
-            </span>
+      <div className="adm-panel">
+        {rows && rows.length === 0 && <p className="muted">No students registered yet.</p>}
+        {rows && rows.length > 0 && (
+          <div className="adm-table-wrap">
+            <table className="adm-table">
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Matric</th>
+                  <th>Phone</th>
+                  <th>Joined</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(rows ?? []).map((row) => {
+                  const initials = (row.full_name || '?').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()
+                  return (
+                    <tr key={row.id}>
+                      <td>
+                        <span style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                          {row.avatar_url
+                            ? <img src={row.avatar_url} alt="" style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }} />
+                            : <span aria-hidden="true" style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--sky)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>{initials}</span>}
+                          <b>{row.full_name ?? '—'}</b>
+                        </span>
+                      </td>
+                      <td>{row.matric_no ?? 'no matric'}</td>
+                      <td>{row.phone ?? '—'}</td>
+                      <td className="muted">{new Date(row.created_at).toLocaleDateString()}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
-        )
-      })}
-    </Layout>
+        )}
+      </div>
+    </AdminLayout>
   )
 }

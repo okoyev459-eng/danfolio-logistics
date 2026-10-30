@@ -20,9 +20,9 @@ import { circlePolygon, validCoord } from '../lib/geo'
 // Markers:
 //   - location pins are colour-coded by kind (pickup/station/destination);
 //     the `selectedId` pin gets a highlight ring;
-//   - keke riders render as distinct vehicle badges (red = nearby, green +
+//   - keke riders render as distinct vehicle badges (navy = nearby, blue +
 //     pulsing = your assigned rider via `highlight`);
-//   - the student's own position renders as a blue dot with an accuracy halo.
+//   - the student's own position renders as a cyan dot with an accuracy halo.
 //
 // Camera: the view auto-fits when the SET of pins changes (ids), not on
 // every live position tick, so a moving keke never yanks the camera.
@@ -36,9 +36,9 @@ const CAMPUS_CENTER = [4.5226, 8.4799] // Unilorin area; overridden by markers
 const OSRM_URL = 'https://router.project-osrm.org/route/v1/driving'
 
 const KIND_COLORS = {
-  pickup: '#2563EB',
-  station: '#1E3A8A',
-  destination: '#7C3AED',
+  pickup: '#1E3A8A',
+  station: '#2563EB',
+  destination: '#0EA5E9',
 }
 
 const KEKE_SVG =
@@ -291,7 +291,7 @@ const CampusMap = forwardRef(function CampusMap(
         id: 'user-accuracy',
         type: 'fill',
         source: 'user-accuracy',
-        paint: { 'fill-color': '#2563EB', 'fill-opacity': 0.12 },
+        paint: { 'fill-color': '#0EA5E9', 'fill-opacity': 0.12 },
       })
     }
   }, [userKey, failed])

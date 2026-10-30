@@ -1,16 +1,23 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import Layout from '../../components/Layout.jsx'
+import AdminLayout from '../../components/AdminLayout.jsx'
 import { supabase } from '../../lib/supabase'
 
-// Admin keke management — status + station assignment + availability
-// controls (spec: station assignment and availability controls).
+// Admin keke management (mockup A2 "kekes"): a table with status pills,
+// station assignment and availability controls (spec: station assignment
+// and availability controls).
 // RLS: admins may update any kekes row (kekes update policy).
 const STATUS_OPTIONS = [
   { value: 'online', label: 'Online' },
   { value: 'offline', label: 'Offline' },
   { value: 'unavailable', label: 'Unavailable' },
 ]
+
+const STATUS_PILL = {
+  online: 'online',
+  on_trip: 'trip',
+  offline: 'muted-pill',
+  unavailable: 'pending',
+}
 
 export default function AdminKekes() {
   const [rows, setRows] = useState(null)
@@ -73,71 +80,97 @@ export default function AdminKekes() {
   }
 
   return (
-    <Layout title="Admin · Keke riders">
-      <Link to="/admin">← Dashboard</Link>
-      <h2>Keke riders</h2>
-      <p className="muted">
+    <AdminLayout title="Kekes">
+      <p className="adm-sub">
         Setting a rider online makes them eligible for dispatch right away
         (their last_seen is refreshed). A rider on a trip is never changed.
       </p>
 
-      {error && <div className="error">{error}</div>}
-      {rows === null && <p className="muted">Loading…</p>}
+      {error && <div className="error" role="alert">{error}</div>}
+      {rows === null && !error && <p className="muted">Loading…</p>}
+      {rows && rows.length === 0 && (
+        <div className="adm-panel muted">No keke riders registered yet.</div>
+      )}
 
-      {(rows ?? []).map((row) => {
-        const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles
-        return (
-          <div className="card" key={row.id}>
-            <div className="row">
-              <span>
-                <span className="plate">{row.keke_number}</span>
-                <br />
-                <b>{profile?.full_name ?? '—'}</b>
-                {profile?.phone && <span className="muted"> · {profile.phone}</span>}
-              </span>
-              <span className="badge">{row.status}</span>
-            </div>
-
-            <p className="muted" style={{ fontSize: 13 }}>
-              Rating {Number(row.rating).toFixed(1)} · last seen{' '}
-              {row.last_seen ? new Date(row.last_seen).toLocaleString() : 'never'}
-            </p>
-
-            <label>Station (Along queue)</label>
-            <select
-              value={row.station_id ?? ''}
-              onChange={(e) => setStation(row.id, e.target.value)}
-              disabled={busyId === row.id || row.status === 'on_trip'}
-              style={{ width: '100%', height: 44, borderRadius: 12, border: '1px solid #cbd5e1', font: 'inherit', padding: '0 10px' }}
-            >
-              <option value="">No station</option>
-              {stations.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-              {STATUS_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  className="secondary"
-                  style={{ marginTop: 0, width: 'auto', padding: '0 14px', height: 40, lineHeight: '40px', fontSize: 14, opacity: row.status === opt.value ? 0.5 : 1 }}
-                  disabled={busyId === row.id || row.status === 'on_trip' || row.status === opt.value}
-                  onClick={() => setStatus(row.id, opt.value)}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-
-            {row.status === 'on_trip' && (
-              <p className="muted" style={{ fontSize: 13, marginTop: 8 }}>
-                This rider is on a trip; status changes are locked until the
-                trip finishes.
-              </p>
-            )}
+      {rows && rows.length > 0 && (
+        <div className="adm-panel">
+          <div className="adm-table-wrap">
+            <table className="adm-table">
+              <thead>
+                <tr>
+                  <th>Keke</th>
+                  <th>Rider</th>
+                  <th>Status</th>
+                  <th>Rating</th>
+                  <th>Last seen</th>
+                  <th>Station (Along queue)</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(rows ?? []).map((row) => {
+                  const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles
+                  return (
+                    <tr key={row.id}>
+                      <td><span className="plate">{row.keke_number}</span></td>
+                      <td>
+                        <b>{profile?.full_name ?? '—'}</b>
+                        {profile?.phone && (
+                          <div className="muted">{profile.phone}</div>
+                        )}
+                      </td>
+                      <td>
+                        <span className={`pill ${STATUS_PILL[row.status] ?? ''}`}>
+                          {String(row.status).replaceAll('_', ' ')}
+                        </span>
+                      </td>
+                      <td>{Number(row.rating).toFixed(1)}</td>
+                      <td className="muted">
+                        {row.last_seen ? new Date(row.last_seen).toLocaleString() : 'never'}
+                      </td>
+                      <td>
+                        <select
+                          className="adm-select"
+                          style={{ height: 40, minWidth: 140 }}
+                          value={row.station_id ?? ''}
+                          onChange={(e) => setStation(row.id, e.target.value)}
+                          disabled={busyId === row.id || row.status === 'on_trip'}
+                          aria-label={`Station for keke ${row.keke_number}`}
+                        >
+                          <option value="">No station</option>
+                          {stations.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                      </td>
+                      <td>
+                        {STATUS_OPTIONS.map((opt) => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            className="adm-btn secondary"
+                            disabled={
+                              busyId === row.id ||
+                              row.status === 'on_trip' ||
+                              row.status === opt.value
+                            }
+                            onClick={() => setStatus(row.id, opt.value)}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                        {row.status === 'on_trip' && (
+                          <div className="muted" style={{ marginTop: 4 }}>
+                            Locked while on a trip.
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
-        )
-      })}
-    </Layout>
+        </div>
+      )}
+    </AdminLayout>
   )
 }

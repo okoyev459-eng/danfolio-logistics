@@ -1,6 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import Layout from '../../components/Layout.jsx'
+import AdminLayout from '../../components/AdminLayout.jsx'
 import { supabase } from '../../lib/supabase'
 
 export default function RegisterKeke() {
@@ -32,28 +31,67 @@ export default function RegisterKeke() {
   }
 
   return (
-    <Layout title="Admin">
-      <Link to="/admin">← Back</Link>
-      <h2>Register keke</h2>
-      <form className="card" onSubmit={handleSubmit}>
-        <label>Full name</label>
-        <input value={form.full_name} onChange={set('full_name')} required />
-        <label>Phone number (contact only)</label>
-        <input value={form.phone} onChange={set('phone')} />
-        <label>Keke number (cannot be changed later)</label>
-        <input value={form.keke_number} onChange={set('keke_number')} required />
-        <label>Password for the rider</label>
-        <input value={form.password} onChange={set('password')} required minLength={6} />
-        {error && <div className="error">{error}</div>}
-        {done && (
-          <div className="ok">
-            Registered. Give the rider these login details:<br />
-            Keke number: <b>{done.keke_number}</b><br />
-            Password: <b>{done.password}</b>
-          </div>
-        )}
-        <button disabled={busy}>{busy ? 'Registering…' : 'Register keke'}</button>
-      </form>
-    </Layout>
+    <AdminLayout title="Register keke">
+      <div className="adm-grid2">
+        <section className="adm-panel">
+          <h2>Rider details</h2>
+          <form onSubmit={handleSubmit}>
+            <div className="adm-form-grid">
+              <div>
+                <label>Full name</label>
+                <input value={form.full_name} onChange={set('full_name')} required />
+              </div>
+              <div>
+                <label>Phone number (contact only)</label>
+                <input value={form.phone} onChange={set('phone')} />
+              </div>
+              <div>
+                <label>Keke number (cannot be changed later)</label>
+                <input value={form.keke_number} onChange={set('keke_number')} required />
+              </div>
+              <div>
+                <label>Password for the rider</label>
+                <input
+                  type="password"
+                  value={form.password}
+                  onChange={set('password')}
+                  required
+                  minLength={6}
+                  autoComplete="new-password"
+                />
+              </div>
+            </div>
+
+            {error && <div className="error" role="alert">{error}</div>}
+
+            <button
+              className="adm-btn"
+              style={{ height: 48, lineHeight: '46px', marginTop: 14, fontSize: 15 }}
+              disabled={busy}
+            >
+              {busy ? 'Registering…' : 'Register keke'}
+            </button>
+          </form>
+        </section>
+
+        <section className="adm-details" aria-live="polite">
+          <h3>Login details to give the rider</h3>
+          {!done && (
+            <p style={{ margin: 0, opacity: 0.8, fontSize: 14 }}>
+              Register a keke and the rider’s login details appear here so you
+              can hand them over.
+            </p>
+          )}
+          {done && (
+            <dl>
+              <dt>Keke number</dt>
+              <dd>{done.keke_number}</dd>
+              <dt>Password</dt>
+              <dd>{done.password}</dd>
+            </dl>
+          )}
+        </section>
+      </div>
+    </AdminLayout>
   )
 }

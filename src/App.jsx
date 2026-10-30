@@ -23,6 +23,7 @@ import AdminFares from './pages/admin/Fares.jsx'
 import AdminKekes from './pages/admin/Kekes.jsx'
 import AdminRides from './pages/admin/Rides.jsx'
 import AdminReports from './pages/admin/Reports.jsx'
+import AdminStudents from './pages/admin/Students.jsx'
 
 function RoleHome() {
   const { session, role, ready } = useAuth()
@@ -74,6 +75,7 @@ export default function App() {
       <Route path="/admin/kekes" element={admin(<AdminKekes />)} />
       <Route path="/admin/rides" element={admin(<AdminRides />)} />
       <Route path="/admin/reports" element={admin(<AdminReports />)} />
+      <Route path="/admin/students" element={admin(<AdminStudents />)} />
       <Route path="/map" element={<ProtectedRoute roles={['student', 'keke', 'admin']}><StationMap /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -11,8 +11,8 @@ body { margin: 0; background: var(--bg); color: var(--navy); font-family: Inter,
 .card { background: #fff; border-radius: 20px; box-shadow: 0 8px 24px rgba(0,0,0,.06); padding: 20px; margin-bottom: 16px; }
 h1, h2 { font-family: Poppins, system-ui, sans-serif; margin: 0 0 12px; }
 label { display: block; font-size: 14px; margin: 12px 0 4px; }
-input { width: 100%; height: 48px; border-radius: 14px; border: 1px solid #cbd5e1; padding: 0 14px; font-size: 16px; }
-button, .btn { display: inline-block; width: 100%; height: 52px; margin-top: 18px; border: 0; border-radius: 16px; background: var(--blue); color: #fff; font-size: 17px; font-weight: 600; cursor: pointer; text-align: center; line-height: 52px; text-decoration: none; }
+input { width: 100%; height: 52px; border-radius: 14px; border: 1px solid #cbd5e1; padding: 0 14px; font-size: 16px; background: #fff; }
+button, .btn { display: inline-block; width: 100%; height: 56px; margin-top: 18px; border: 0; border-radius: 20px; background: var(--blue); color: #fff; font-family: Poppins, Inter, system-ui, sans-serif; font-size: 17px; font-weight: 600; cursor: pointer; text-align: center; line-height: 56px; text-decoration: none; }
 button:disabled { opacity: .6; }
 .link { background: none; color: var(--blue); height: auto; line-height: 1.4; margin-top: 10px; }
 .error { background: #fee2e2; color: #991b1b; border-radius: 12px; padding: 10px 14px; margin-top: 14px; }
@@ -23,7 +23,7 @@ button:disabled { opacity: .6; }
 .opt.sel { background: var(--sky); border-color: var(--blue); }
 .fare { background: var(--navy); color: #fff; border-radius: 20px; padding: 18px 22px; margin-top: 16px; }
 .fare b { display: block; font-size: 40px; color: #bfdbfe; }
-.badge { display: inline-block; background: var(--sky); color: var(--navy); border-radius: 12px; padding: 4px 10px; font-size: 14px; font-weight: 600; }
+.badge { display: inline-block; background: var(--sky); color: var(--navy); border-radius: 10px; padding: 4px 10px; font-size: 14px; font-weight: 600; }
 .secondary { background: #fff; color: var(--blue); border: 2px solid var(--blue); }
 .muted { font-size: 14px; opacity: .8; }
 .row { display: flex; justify-content: space-between; align-items: center; }
@@ -38,14 +38,33 @@ button:disabled { opacity: .6; }
 .rowline { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; }
 a.plain { text-decoration: none; color: inherit; }
 
+/* Trip progress bar (mockup: 8px track #DBEAFE, fill #2563EB) — shared by
+   the booking flow, the live ride screen and the rider trip screens. */
+.bk-progress {
+  height: 8px;
+  border-radius: 4px;
+  background: #dbeafe;
+  margin: 14px 0;
+  overflow: hidden;
+}
+.bk-progress i {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: #2563eb;
+  transition: width 0.6s ease;
+}
+
 /* ---- CampusMap markers (global so StationMap markers stay styled) ---- */
 /* maplibre-gl positions markers with an inline `transform`, so selection
-   and pulse effects use box-shadow / background, never `transform`. */
+   and pulse effects use box-shadow / background, never `transform`.
+   Mockup language: dark navy keke chips ("dark squares are kekes"),
+   cyan user dot with a soft halo, blue station/pickup pins. */
 .km-keke {
   width: 34px;
   height: 34px;
-  border-radius: 50%;
-  background: #dc2626;
+  border-radius: 11px;
+  background: #1e3a8a;
   color: #fff;
   display: flex;
   align-items: center;
@@ -54,13 +73,13 @@ a.plain { text-decoration: none; color: inherit; }
   border: 2px solid #fff;
 }
 .km-keke svg { width: 20px; height: 20px; }
-.km-keke-hi { background: #16a34a; }
+.km-keke-hi { background: #2563eb; }
 .km-keke-hi::before {
   content: '';
   position: absolute;
   inset: -6px;
-  border-radius: 50%;
-  border: 3px solid #16a34a;
+  border-radius: 14px;
+  border: 3px solid #2563eb;
   animation: km-pulse 1.6s ease-out infinite;
 }
 @keyframes km-pulse {
@@ -71,9 +90,9 @@ a.plain { text-decoration: none; color: inherit; }
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #2563eb;
+  background: #0ea5e9;
   border: 3px solid #fff;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.5);
+  box-shadow: 0 0 0 6px rgba(14, 165, 233, 0.25), 0 2px 8px rgba(14, 165, 233, 0.5);
 }
 .km-point-sel {
   box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.35), 0 4px 12px rgba(15, 23, 42, 0.3);

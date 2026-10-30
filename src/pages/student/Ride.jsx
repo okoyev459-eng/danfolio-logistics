@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import Layout from '../../components/Layout.jsx'
 import CampusMap from '../../components/CampusMap.jsx'
 import { supabase } from '../../lib/supabase'
+import { useGeolocation } from '../../lib/useGeolocation'
+import { distanceMeters, validCoord } from '../../lib/geo'
 
 // Ride — the live status page for one booking.
 //
@@ -56,6 +58,7 @@ const STATUS_COPY = {
 export default function Ride() {
   const { rideId } = useParams()
   const navigate = useNavigate()
+  const geo = useGeolocation()
 
   const [ride, setRide] = useState(null)
   const [ticket, setTicket] = useState(null)
@@ -240,25 +243,48 @@ export default function Ride() {
   const canCancel = ['searching', 'accepted', 'paid'].includes(ride.status)
   const isFinished = ['completed', 'cancelled', 'refunded'].includes(ride.status)
 
+  // Honest trip progress (mockup Trip screen bar): remaining straight-line
+  // distance vs the full route; hidden when the student's location is off.
+  let tripProgress = null
+  if (ride.status === 'on_trip' && geo.position && validCoord(ride.from) && validCoord(ride.to)) {
+    const total = distanceMeters(ride.from, ride.to)
+    const remaining = distanceMeters(geo.position, ride.to)
+    if (total > 0) {
+      tripProgress = Math.min(100, Math.max(0, Math.round((1 - remaining / total) * 100)))
+    }
+  }
+
   return (
     <Layout title="My ride">
       <section style={{ paddingTop: 12 }}>
         <Link to="/student">← Back to home</Link>
 
-        <div className="fare" role="status" aria-live="polite" style={{ marginTop: 16 }}>
-          <h2>{copy.title}</h2>
-          <p>{copy.body}</p>
-          <p>
-            <strong>
-              {ride.from?.name} → {ride.to?.name}
-            </strong>
-          </p>
-          <p>
-            ₦{Number(ride.fare).toLocaleString('en-NG')} ·{' '}
-            {ride.mode === 'drop' ? 'Drop' : 'Along'} ·{' '}
-            <span className="badge">{String(ride.status).replaceAll('_', ' ')}</span>
-          </p>
+        <h2 style={{ marginTop: 20 }}>{copy.title}</h2>
+        <p className="muted" style={{ marginTop: -4 }}>{copy.body}</p>
+
+        <div className="fare" role="status" aria-live="polite">
+          <span>{ride.mode === 'drop' ? 'Drop' : 'Along'} · fixed fare</span>
+          <b>₦{Number(ride.fare).toLocaleString('en-NG')}</b>
+          <span className="badge">{String(ride.status).replaceAll('_', ' ')}</span>
         </div>
+
+        <div className="card" style={{ marginTop: -4 }}>
+          <div className="rowline">
+            <span className="muted">Route</span>
+            <b>{ride.from?.name} → {ride.to?.name}</b>
+          </div>
+        </div>
+
+        {tripProgress !== null && (
+          <>
+            <div className="bk-progress" aria-hidden="true">
+              <i style={{ width: `${tripProgress}%` }} />
+            </div>
+            <p className="muted" style={{ fontSize: 13, marginTop: -8 }}>
+              {tripProgress}% of the way to {ride.to?.name}
+            </p>
+          </>
+        )}
 
         {error && <div className="error" role="alert">{error}</div>}
         {notice && <div className="ok" role="status">{notice}</div>}

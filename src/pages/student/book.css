@@ -26,7 +26,7 @@
   transition: bottom 0.3s cubic-bezier(0.22, 0.9, 0.24, 1);
 }
 
-/* Floating glass top bar over the map */
+/* Floating glass top bar over the map (mockup pill language: white r20) */
 .bk-top {
   position: absolute;
   top: calc(10px + env(safe-area-inset-top));
@@ -45,7 +45,7 @@
   height: 44px;
   flex: 0 0 auto;
   border: 0;
-  border-radius: 50%;
+  border-radius: 20px;
   background: rgba(255, 255, 255, 0.95);
   color: #1e3a8a;
   font-size: 20px;
@@ -61,7 +61,7 @@
   flex: 1 1 auto;
   min-width: 0;
   background: rgba(255, 255, 255, 0.95);
-  border-radius: 999px;
+  border-radius: 20px;
   padding: 10px 18px;
   font-family: Poppins, system-ui, sans-serif;
   font-weight: 700;
@@ -77,7 +77,7 @@
   height: 44px;
   flex: 0 0 auto;
   border: 0;
-  border-radius: 50%;
+  border-radius: 20px;
   background: rgba(255, 255, 255, 0.95);
   color: #1e3a8a;
   font-size: 17px;
@@ -132,26 +132,87 @@
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.3);
 }
 
+/* Dim overlay between map and sheet (mockup: rgba(15,23,42,.5) while the
+   screen is deciding — searching / awaiting payment). */
+.bk-dim {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  background: rgba(15, 23, 42, 0.5);
+  pointer-events: none;
+}
+
+/* Map pill (mockup `.pill`: white r20, top-left status like "3 min to pick-up") */
+.bk-pill {
+  position: absolute;
+  top: calc(64px + env(safe-area-inset-top));
+  left: 16px;
+  z-index: 30;
+  background: #fff;
+  color: #1e3a8a;
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.18);
+}
+
 /* ---- Sheet content ---- */
 .bk-step {
   font-family: Poppins, system-ui, sans-serif;
   font-weight: 700;
-  font-size: 17px;
+  font-size: 20px;
   margin: 2px 0 2px;
+}
+.bk-microlabel {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  opacity: 0.7;
+  margin: 0 0 6px;
 }
 .bk-sub { font-size: 13px; opacity: 0.75; margin: 0 0 10px; }
 
-/* Route row: pickup dot -> line -> destination dot */
+/* Mockup "Step 2 of 2 · …" progress line */
+.bk-progress-steps {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e3a8a;
+  opacity: 0.85;
+  margin: 0 0 8px;
+}
+.bk-progress-steps i {
+  display: block;
+  width: 44px;
+  height: 6px;
+  border-radius: 3px;
+  background: #dbeafe;
+  position: relative;
+  overflow: hidden;
+}
+.bk-progress-steps i::after {
+  content: '';
+  position: absolute;
+  inset: 0 50% 0 0;
+  background: #2563eb;
+  border-radius: 3px;
+}
+
+/* Route row: pickup dot -> line -> destination dot (mockup chip: white card) */
 .bk-route {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: #f1f5f9;
-  border-radius: 16px;
+  background: #fff;
+  border: 2px solid #e2e8f0;
+  border-radius: 20px;
   padding: 12px 14px;
   margin-bottom: 10px;
   cursor: pointer;
-  border: 2px solid transparent;
   width: 100%;
   text-align: left;
   font: inherit;
@@ -168,9 +229,9 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #2563eb;
+  background: #1e3a8a;
 }
-.bk-dot.to { background: #7c3aed; }
+.bk-dot.to { background: #0ea5e9; }
 .bk-dot-line { width: 2px; height: 16px; background: #cbd5e1; }
 .bk-route-text { min-width: 0; flex: 1 1 auto; }
 .bk-route-text b {
@@ -188,7 +249,8 @@
   color: #2563eb;
 }
 
-/* Scrollable option list inside the sheet */
+/* Scrollable option list inside the sheet (mockup rows: r20, selected
+   = #DBEAFE + 2px #2563EB) */
 .bk-list { display: flex; flex-direction: column; gap: 8px; }
 .bk-opt {
   display: flex;
@@ -197,11 +259,11 @@
   gap: 10px;
   width: 100%;
   margin: 0;
-  padding: 13px 15px;
+  padding: 14px 16px;
   background: #fff;
   color: #1e3a8a;
   border: 2px solid #e2e8f0;
-  border-radius: 14px;
+  border-radius: 20px;
   font-size: 15px;
   font-weight: 600;
   text-align: left;
@@ -211,7 +273,34 @@
 .bk-opt.sel { background: #dbeafe; border-color: #2563eb; }
 .bk-opt small { font-weight: 500; font-size: 12px; opacity: 0.65; }
 
-/* Fare / ETA summary row */
+/* "Near you" chip on the closest pick-up point (mockup copy) */
+.bk-near {
+  background: #dbeafe;
+  color: #1e3a8a;
+  border-radius: 10px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  margin-left: 8px;
+}
+
+/* Search destinations field (mockup: "Where are you going?") */
+.bk-search {
+  width: 100%;
+  height: 52px;
+  border-radius: 14px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  padding: 0 14px;
+  font: inherit;
+  font-size: 15px;
+  color: #1e3a8a;
+  margin: 0 0 10px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+}
+.bk-search::placeholder { color: #64748b; opacity: 0.8; }
+
+/* Fare / ETA summary card (mockup `.fc`: navy r20 pad 18/22, 40px number) */
 .bk-fare {
   display: flex;
   align-items: center;
@@ -219,12 +308,53 @@
   gap: 12px;
   background: #1e3a8a;
   color: #fff;
-  border-radius: 16px;
-  padding: 14px 16px;
+  border-radius: 20px;
+  padding: 18px 22px;
   margin: 12px 0;
 }
-.bk-fare b { font-size: 26px; font-family: Poppins, system-ui, sans-serif; }
+.bk-fare b {
+  font-size: 40px;
+  font-family: Poppins, system-ui, sans-serif;
+  font-weight: 700;
+  color: #bfdbfe;
+  line-height: 1.1;
+}
 .bk-fare small { display: block; font-size: 12px; opacity: 0.75; font-weight: 400; }
+
+/* Trip progress bars live in index.css (.bk-progress) so every screen
+   (booking flow, live ride, rider trip) shares them. */
+
+/* Elapsed "Searching · 0:12" counter (real time since the ride was created) */
+.bk-count {
+  font-family: Poppins, system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  color: #1e3a8a;
+}
+
+/* "No keke available" full-attention state (mockup 6b) */
+.bk-empty {
+  text-align: center;
+  padding: 8px 0 4px;
+}
+.bk-empty-icon {
+  width: 88px;
+  height: 88px;
+  margin: 6px auto 14px;
+  border-radius: 50%;
+  background: #fee2e2;
+  color: #b91c1c;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40px;
+}
+.bk-empty h3 {
+  font-family: Poppins, system-ui, sans-serif;
+  font-size: 22px;
+  margin: 0 0 6px;
+  color: #1e3a8a;
+}
 
 /* Primary action button inside the sheet (overrides the global full-width btn) */
 .bk-cta { margin-top: 10px; }

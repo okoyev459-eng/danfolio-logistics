@@ -91,9 +91,12 @@ export default function BookFlow({ mode }) {
   const [fare, setFare] = useState(null)
   const [fareState, setFareState] = useState('idle') // idle | loading | ready | missing
 
+  const [fromConfirmed, setFromConfirmed] = useState(false)
+  const [query, setQuery] = useState('')
   const [sheetIndex, setSheetIndex] = useState(0)
   const [message, setMessage] = useState('')
   const [booking, setBooking] = useState(false)
+  const [elapsed, setElapsed] = useState(0)
 
   const [activeRide, setActiveRide] = useState(null)
   const [statusError, setStatusError] = useState('')
@@ -324,6 +327,13 @@ export default function BookFlow({ mode }) {
     [locations, from?.name],
   )
 
+  // Destination search field (mockup "Where are you going?").
+  const filteredTos = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return tos
+    return tos.filter((l) => l.name.toLowerCase().includes(q))
+  }, [tos, query])
+
   // Nearest-first ordering once the student shares their location.
   const sortedFroms = useMemo(() => {
     if (!geo.position || !froms.length) return froms
@@ -334,8 +344,22 @@ export default function BookFlow({ mode }) {
     })
   }, [froms, geo.position])
 
-  // Planning stage derived from the current selection.
-  const stage = activeRide ? null : !from ? 'from' : !to ? 'to' : 'review'
+  // Planning stage: pick-up first (explicit "Confirm pick-up"), then
+  // destination + fare ("Step 2 of 2") which books the ride.
+  const stage = activeRide ? null : !from || !fromConfirmed ? 'from' : 'to'
+
+  // Elapsed seconds on the "Searching · 0:12" counter (real time since the
+  // ride row was created — never faked).
+  useEffect(() => {
+    if (activeRide?.status !== 'searching') return undefined
+    const createdAt = activeRide.created_at
+      ? new Date(activeRide.created_at).getTime()
+      : Date.now()
+    const tick = () => setElapsed(Math.max(0, Math.floor((Date.now() - createdAt) / 1000)))
+    tick()
+    const timer = window.setInterval(tick, 1000)
+    return () => window.clearInterval(timer)
+  }, [activeRide?.status, activeRide?.created_at])
 
   // Fresh = heartbeat within KEKE_FRESH_MS and real coordinates.
   const freshKekes = useMemo(() => {
@@ -407,6 +431,7 @@ export default function BookFlow({ mode }) {
       setMessage('')
     }
     setFrom(location)
+    setFromConfirmed(false)
   }
 
   async function pickDestination(location) {
@@ -533,6 +558,8 @@ export default function BookFlow({ mode }) {
     setMessage('')
     setFrom(null)
     setTo(null)
+    setFromConfirmed(false)
+    setQuery('')
     setFare(null)
     setFareState('idle')
     setConfirmCancel(false)
@@ -558,11 +585,11 @@ export default function BookFlow({ mode }) {
       return (
         <>
           <p className="bk-step">
-            {isDrop ? 'Choose your pick-up point' : 'Choose your station'}
+            {isDrop ? 'Choose your pick-up' : 'Choose your station'}
           </p>
           <p className="bk-sub">
             {isDrop
-              ? 'Tap a point on the map or pick from the list.'
+              ? 'Select one of the campus pick-up points.'
               : 'You must be at the station to be picked up.'}
             {geo.state === 'granted' && ' Nearest points are first.'}
           </p>
@@ -592,81 +619,57 @@ export default function BookFlow({ mode }) {
           )}
 
           <div className="bk-list">
-            {sortedFroms.map((location) => {
+            {sortedFroms.map((location, index) => {
               const dist = locationDistance(location)
+              const isNearest = geo.state === 'granted' && index === 0 && dist
               return (
                 <button
                   key={location.id}
                   className={'bk-opt' + (from?.id === location.id ? ' sel' : '')}
                   onClick={() => pickPickup(location)}
                 >
-                  {location.name}
+                  <span style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
+                    <span
+                      style={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {location.name}
+                    </span>
+                    {isNearest && <span className="bk-near">Near you</span>}
+                  </span>
                   {dist && <small>{dist}</small>}
                 </button>
               )
             })}
           </div>
-        </>
-      )
-    }
 
-    if (stage === 'to') {
-      return (
-        <>
           <button
             type="button"
-            className="bk-route"
-            onClick={() => {
-              setFrom(null)
-              setTo(null)
-              setFare(null)
-              setFareState('idle')
-            }}
+            className="bk-cta"
+            disabled={!from}
+            onClick={() => setFromConfirmed(true)}
           >
-            <span className="bk-route-dots" aria-hidden="true">
-              <span className="bk-dot" />
-              <span className="bk-dot-line" />
-              <span className="bk-dot to" />
-            </span>
-            <span className="bk-route-text">
-              <b>{from.name}</b>
-              <span>Where to?</span>
-            </span>
-            <span className="bk-route-change">Change</span>
+            {isDrop ? 'Confirm pick-up' : 'Confirm station'}
           </button>
-
-          <p className="bk-step">Where are you going?</p>
-          <div className="bk-list">
-            {tos.map((location) => {
-              const dist = locationDistance(location)
-              return (
-                <button
-                  key={location.id}
-                  className={'bk-opt' + (to?.id === location.id ? ' sel' : '')}
-                  onClick={() => pickDestination(location)}
-                >
-                  {location.name}
-                  {dist && <small>{dist}</small>}
-                </button>
-              )
-            })}
-          </div>
         </>
       )
     }
 
-    // stage === 'review'
+    // stage === 'to' — mockup "Step 2 of 2 · Choose destination" + fixed fare
     return (
       <>
+        <p className="bk-progress-steps">
+          Step 2 of 2 · Choose destination
+          <i aria-hidden="true" />
+        </p>
+
         <button
           type="button"
           className="bk-route"
-          onClick={() => {
-            setTo(null)
-            setFare(null)
-            setFareState('idle')
-            setMessage('')
-          }}
+          onClick={() => setFromConfirmed(false)}
         >
           <span className="bk-route-dots" aria-hidden="true">
             <span className="bk-dot" />
@@ -675,12 +678,43 @@ export default function BookFlow({ mode }) {
           </span>
           <span className="bk-route-text">
             <b>{from.name}</b>
-            <span>{to.name}</span>
+            <span>{isDrop ? 'Pick-up (fixed)' : 'Station (fixed)'}</span>
           </span>
           <span className="bk-route-change">Change</span>
         </button>
 
-        {fareState === 'ready' && (
+        <input
+          className="bk-search"
+          type="search"
+          placeholder="Where are you going?"
+          aria-label="Search destinations"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+
+        <div className="bk-list">
+          {filteredTos.map((location) => {
+            const dist = locationDistance(location)
+            return (
+              <button
+                key={location.id}
+                className={'bk-opt' + (to?.id === location.id ? ' sel' : '')}
+                onClick={() => pickDestination(location)}
+              >
+                {location.name}
+                {dist && <small>{dist}</small>}
+              </button>
+            )
+          })}
+        </div>
+        {filteredTos.length === 0 && (
+          <p className="bk-sub">
+            No destination matches “{query.trim()}”. Check the spelling or pick
+            from the full list.
+          </p>
+        )}
+
+        {to && fareState === 'ready' && (
           <div className="bk-fare">
             <span>
               Fixed fare
@@ -690,18 +724,18 @@ export default function BookFlow({ mode }) {
           </div>
         )}
 
-        {fareState === 'loading' && (
+        {to && fareState === 'loading' && (
           <p className="bk-sub">
             <span className="bk-spin dark" aria-hidden="true" />
             Estimating your fare…
           </p>
         )}
 
-        {fareState === 'missing' && (
+        {to && fareState === 'missing' && (
           <div className="error">No fare is set for this route yet.</div>
         )}
 
-        {routeEta && (
+        {to && routeEta && (
           <p className="bk-sub">
             ≈ {Math.max(1, Math.round(routeEta.seconds / 60))} min by road
             {' '}(OpenStreetMap/OSRM estimate)
@@ -721,11 +755,7 @@ export default function BookFlow({ mode }) {
           onClick={createRide}
         >
           {booking && <span className="bk-spin" aria-hidden="true" />}
-          {booking
-            ? 'Creating ride…'
-            : isDrop
-              ? 'Find available rides'
-              : 'Find me a ride'}
+          {booking ? 'Creating ride…' : 'Continue'}
         </button>
       </>
     )
@@ -741,14 +771,49 @@ export default function BookFlow({ mode }) {
     const isFinished = ['completed', 'cancelled', 'refunded'].includes(status)
     const rideFare = Number(activeRide.fare ?? fare ?? 0).toLocaleString('en-NG')
 
+    // Mockup 6b — a dedicated "no keke" screen instead of a status line.
+    if (activeRide.noRide) {
+      return (
+        <div className="bk-empty">
+          <div className="bk-empty-icon" aria-hidden="true">!</div>
+          <h3>No keke available</h3>
+          <p className="bk-sub">
+            We couldn’t find an eligible Keke to accept your request right now.
+            Please try again shortly.
+          </p>
+          <button type="button" className="bk-cta" onClick={tryAgain}>
+            Try again
+          </button>
+          <Link className="btn secondary bk-cta" to="/student">
+            Return to Home
+          </Link>
+        </div>
+      )
+    }
+
+    // Honest trip progress: distance remaining to the destination compared
+    // with the straight-line length of the whole route (needs the student's
+    // location; hidden entirely when it is unavailable).
+    let tripProgress = null
+    if (
+      status === 'on_trip' &&
+      geo.position &&
+      validCoord(activeRide.from) &&
+      validCoord(activeRide.to)
+    ) {
+      const total = distanceMeters(activeRide.from, activeRide.to)
+      const remaining = distanceMeters(geo.position, activeRide.to)
+      if (total > 0) {
+        tripProgress = Math.min(100, Math.max(0, Math.round((1 - remaining / total) * 100)))
+      }
+    }
+
+    const mmss = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}`
+
     return (
       <>
         <p className="bk-step">{copy.title}</p>
-        <p className="bk-sub">
-          {activeRide.noRide
-            ? 'We couldn’t find an eligible Keke to accept your request right now. Please try again shortly.'
-            : copy.body}
-        </p>
+        <p className="bk-sub">{copy.body}</p>
 
         {(activeRide.from || activeRide.to) && (
           <div className="bk-route" style={{ cursor: 'default' }}>
@@ -783,8 +848,15 @@ export default function BookFlow({ mode }) {
         {status === 'searching' && (
           <p className="bk-sub" role="status" aria-live="polite">
             <span className="bk-spin dark" aria-hidden="true" />
-            Offering your trip to eligible riders… keep this screen open.
+            Searching · <span className="bk-count">{mmss}</span> — offering your
+            trip to eligible riders one at a time. Keep this screen open.
           </p>
+        )}
+
+        {tripProgress !== null && (
+          <div className="bk-progress" aria-hidden="true">
+            <i style={{ width: `${tripProgress}%` }} />
+          </div>
         )}
 
         {activeRide.booking_code && (
@@ -879,14 +951,19 @@ export default function BookFlow({ mode }) {
   }
 
   const sheetTitle = activeRide
-    ? STATUS_COPY[activeRide.status]?.title ?? 'Your booking'
+    ? activeRide.noRide
+      ? 'No keke available'
+      : STATUS_COPY[activeRide.status]?.title ?? 'Your booking'
     : stage === 'from'
       ? isDrop
         ? 'Book a Drop'
         : 'Book Along'
-      : stage === 'to'
-        ? 'Choose destination'
-        : 'Review & book'
+      : 'Choose destination'
+
+  // Dim the map while the app is deciding (searching / awaiting payment),
+  // matching the mockup's overlay treatment.
+  const dimMap =
+    Boolean(activeRide) && ['searching', 'accepted'].includes(activeRide.status)
 
   // ------------------------------------------------------------------
   // Render
@@ -910,15 +987,24 @@ export default function BookFlow({ mode }) {
             if (stage === 'from' && point.kind === fromKind) pickPickup(point)
             else if (stage === 'to' && point.kind === 'destination') {
               pickDestination(point)
-            } else if (stage === 'review') {
-              if (point.id === from?.id) return
-              if (point.kind === 'destination') pickDestination(point)
+            } else if (stage === 'to' && point.kind === fromKind) {
+              // Tapping another pick-up point while choosing the destination
+              // returns to step 1 with that point selected.
+              pickPickup(point)
             }
           }}
           onRouteInfo={setRouteEta}
           onFail={() => setMapFailed(true)}
         />
       </div>
+
+      {dimMap && <div className="bk-dim" aria-hidden="true" />}
+
+      {activeRide && routeEta && (
+        <div className="bk-pill">
+          ≈ {Math.max(1, Math.round(routeEta.seconds / 60))} min by road
+        </div>
+      )}
 
       <div className="bk-top">
         <Link className="bk-back" to="/student/book" aria-label="Back">

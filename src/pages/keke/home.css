@@ -8,44 +8,44 @@
 }
 .keke-hero {
   min-height: 260px;
-  background: #243f8d;
+  background: #1e3a8a;
   color: #fff;
   padding: 48px 24px 28px;
 }
 .keke-hero-top { display: flex; align-items: center; gap: 18px; }
 .keke-online-toggle {
-  flex: 0 0 78px;
-  width: 78px;
-  height: 48px;
+  flex: 0 0 72px;
+  width: 72px;
+  height: 40px;
   padding: 5px;
   margin: 0;
   border: 0;
-  border-radius: 30px;
-  background: #6478ad;
+  border-radius: 20px;
+  background: #64748b;
   display: flex;
   align-items: center;
   line-height: 1;
 }
 .keke-online-toggle span {
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   background: #fff;
   display: block;
   transition: transform .18s ease;
 }
-.keke-online-toggle.is-online { background: #2586d9; }
-.keke-online-toggle.is-online span { transform: translateX(30px); }
+.keke-online-toggle.is-online { background: #38bdf8; }
+.keke-online-toggle.is-online span { transform: translateX(32px); }
 .keke-brand span { font-size: 14px; font-weight: 600; }
 .keke-brand h1 { font-size: 23px; line-height: 1.2; margin: 2px 0 0; color: #fff; }
 .keke-earnings-today { display: flex; flex-direction: column; gap: 3px; margin-top: 18px; }
 .keke-earnings-today span { font-size: 14px; font-weight: 600; }
-.keke-earnings-today strong { font-family: Georgia, 'Times New Roman', serif; font-size: 44px; line-height: 1.05; color: #c6dcff; letter-spacing: -1px; }
+.keke-earnings-today strong { font-family: Poppins, Inter, sans-serif; font-weight: 700; font-size: 44px; line-height: 1.05; color: #bfdbfe; letter-spacing: -1px; }
 .keke-content { width: 100%; max-width: 720px; margin: 0 auto; padding: 30px 20px 24px; flex: 1; }
-.keke-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.keke-stat { min-height: 84px; background: #fff; border-radius: 22px; display: flex; flex-direction: column; justify-content: center; align-items: center; box-shadow: 0 5px 20px rgba(35, 62, 130, .04); }
-.keke-stat span { font-size: 14px; }
-.keke-stat strong { font-family: Georgia, 'Times New Roman', serif; font-size: 27px; line-height: 1.15; }
+.keke-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+.keke-stat { min-height: 84px; background: #fff; border-radius: 20px; display: flex; flex-direction: column; justify-content: center; align-items: center; box-shadow: 0 5px 20px rgba(30, 58, 138, .08); gap: 2px; }
+.keke-stat span { font-size: 13px; color: #64748b; }
+.keke-stat strong { font-family: Poppins, Inter, sans-serif; font-weight: 700; font-size: 24px; line-height: 1.15; color: #1e3a8a; }
 .keke-hint { margin-top: 46px; background: #dceaff; border-radius: 20px; padding: 17px 16px 15px; display: flex; flex-direction: column; gap: 2px; color: #21418e; }
 .keke-hint span { font-size: 14px; }
 .keke-hint strong { font-size: 17px; line-height: 1.25; }
@@ -58,6 +58,283 @@
 .keke-tab-placeholder h2 { font-size: 24px; }
 .keke-tab-placeholder p { color: #657392; line-height: 1.5; }
 .keke-signout { max-width: 220px; }
+
+/* ---- Mockup K2: stat cards sit on the light background below the hero --- */
+.keke-stats-wrap {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 18px 20px 0;
+}
+.keke-stats.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+/* ---- Trip screens (K6 / K8): full-screen map + bottom sheet ------------ */
+.keke-trip-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: #e2e8f0;
+  z-index: 40;
+}
+.keke-trip-map {
+  position: absolute;
+  inset: 0;
+}
+.keke-trip-map .campus-map,
+.keke-trip-map > div {
+  height: 100% !important;
+  border-radius: 0 !important;
+}
+.keke-trip-pill {
+  position: absolute;
+  top: calc(16px + env(safe-area-inset-top));
+  left: 16px;
+  z-index: 30;
+  background: #fff;
+  color: #1e3a8a;
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.18);
+}
+.keke-trip-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  background: #fff;
+  border-radius: 28px 28px 0 0;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.08);
+  padding: 20px 24px calc(22px + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  max-height: 70vh;
+}
+
+.kr-student-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.kr-student-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.kr-student-text strong {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e3a8a;
+}
+.kr-student-text span {
+  font-size: 13px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kr-fare-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.kr-fare-row span {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  opacity: 0.65;
+}
+.kr-fare-row strong {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e3a8a;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.kr-fare-row b {
+  font-family: Poppins, Inter, sans-serif;
+  font-size: 28px;
+  font-weight: 700;
+  color: #1e3a8a;
+  line-height: 1.1;
+}
+
+.kr-paid-note {
+  font-size: 13px;
+  color: #16a34a;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+
+.kr-call {
+  display: block;
+  text-align: center;
+  height: 52px;
+  line-height: 52px;
+  border-radius: 20px;
+  border: 2px solid #e2e8f0;
+  color: #1e3a8a;
+  font-family: Poppins, Inter, sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  text-decoration: none;
+  margin-bottom: 10px;
+}
+
+.kr-progress-note {
+  font-size: 13px;
+  color: #64748b;
+  margin: -8px 0 12px;
+}
+
+/* ---- Trip screen (K7): navy header + avatar --------------------------- */
+.keke-trip-app {
+  padding-bottom: 0;
+}
+.keke-trip-head {
+  background: #1e3a8a;
+  color: #fff;
+  text-align: center;
+  padding: 44px 24px 26px;
+}
+.keke-trip-head h1 {
+  font-family: Poppins, Inter, sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  margin: 12px 0 2px;
+  color: #fff;
+}
+.keke-trip-head p {
+  font-size: 14px;
+  opacity: 0.85;
+  margin: 0;
+}
+.keke-trip-app .keke-trip-sheet {
+  position: static;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  max-height: none;
+  padding: 24px 20px 32px;
+}
+
+.kr-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: Poppins, Inter, sans-serif;
+  font-size: 30px;
+  font-weight: 700;
+  margin: 0 auto;
+  border: 3px solid rgba(255, 255, 255, 0.35);
+}
+.kr-avatar.sm {
+  width: 48px;
+  height: 48px;
+  font-size: 20px;
+  margin: 0;
+  border: 0;
+  background: #dbeafe;
+  color: #1e3a8a;
+}
+
+/* ---- K10 Earnings: period chips + 7-day bar chart --------------------- */
+.keke-period {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+.keke-period button {
+  flex: 0 0 auto;
+  width: auto;
+  height: 40px;
+  line-height: 36px;
+  margin: 0;
+  padding: 0 16px;
+  border-radius: 20px;
+  border: 2px solid #e2e8f0;
+  background: #fff;
+  color: #1e3a8a;
+  font-size: 14px;
+  font-weight: 600;
+}
+.keke-period button.active {
+  background: #dbeafe;
+  border-color: #2563eb;
+}
+
+.keke-chart {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+  background: #fff;
+  border-radius: 20px;
+  padding: 16px 14px 10px;
+  margin-bottom: 14px;
+  box-shadow: 0 5px 20px rgba(30, 58, 138, 0.06);
+}
+.keke-chart-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.keke-chart-track {
+  width: 100%;
+  height: 96px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.keke-chart-bar {
+  width: 70%;
+  max-width: 26px;
+  border-radius: 6px 6px 3px 3px;
+  background: #2563eb;
+  transition: height 0.4s ease;
+}
+.keke-chart-col span {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+/* ---- K11 Profile: navy header block ----------------------------------- */
+.keke-profile-head {
+  background: #1e3a8a;
+  color: #fff;
+  border-radius: 24px;
+  text-align: center;
+  padding: 28px 24px 24px;
+  margin-bottom: 16px;
+}
+.keke-profile-head h1 {
+  font-family: Poppins, Inter, sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  margin: 12px 0 2px;
+}
+.keke-profile-head p {
+  font-size: 13px;
+  opacity: 0.85;
+  margin: 0;
+}
 @media (min-width: 760px) {
   .keke-app { max-width: 480px; margin: 0 auto; box-shadow: 0 0 45px rgba(30, 55, 110, .1); }
   .keke-bottom-nav { left: 50%; right: auto; width: min(480px, 100%); transform: translateX(-50%); }
