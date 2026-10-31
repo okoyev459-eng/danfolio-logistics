@@ -868,7 +868,9 @@ export default function KekeHome() {
   }
 
   // ---- Trip screens (mockup K6 / K7 / K8) — full screen, no bottom nav -
-  if (onTrip) {
+  // While on a trip, Home shows the trip (card or map) and the other tabs
+  // stay reachable so the rider is never stuck (Profile has Sign out).
+  if (onTrip && (tab === 'Home' || tripView === 'map')) {
     if (!activeTrip) {
       return (
         <main className="keke-app">
@@ -989,6 +991,19 @@ export default function KekeHome() {
               </>
             )}
           </section>
+
+          <nav className="keke-bottom-nav" aria-label="Rider navigation">
+            {tabs.map((item) => (
+              <button
+                key={item}
+                type="button"
+                className={tab === item ? 'active' : ''}
+                onClick={() => setTab(item)}
+              >
+                {item}
+              </button>
+            ))}
+          </nav>
         </main>
       )
     }
@@ -1034,7 +1049,9 @@ export default function KekeHome() {
               </div>
               <div>
                 <small>Fare</small>
-                <strong>Paid ₦{Number(activeTrip.fare).toLocaleString()}</strong>
+                <strong>
+                  {ticket ? `Paid ₦${Number(activeTrip.fare).toLocaleString()}` : 'Awaiting payment'}
+                </strong>
               </div>
               <div>
                 <small>Status</small>
@@ -1059,7 +1076,7 @@ export default function KekeHome() {
 
             <button
               type="button"
-              className="keke-signout"
+              className="keke-signout ghost"
               style={{ marginTop: 10 }}
               disabled={busy}
               onClick={() => setBoardCode('')}

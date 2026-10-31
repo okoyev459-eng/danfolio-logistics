@@ -58,6 +58,12 @@
 .keke-tab-placeholder h2 { font-size: 24px; }
 .keke-tab-placeholder p { color: #657392; line-height: 1.5; }
 .keke-signout { max-width: 220px; }
+/* Secondary "Clear code" action — never a solid primary blue */
+.keke-signout.ghost { background: #fff; border: 2px solid #c7d5f5; color: #1e3a8a; line-height: 52px; }
+/* Trip screens: anchor the floating back button inside the app frame */
+.keke-trip-app { position: relative; }
+/* Trip-card hint lines stack instead of running together */
+.keke-hint > span > strong, .keke-hint > span > span { display: block; }
 
 /* ---- Mockup K2: stat cards sit on the light background below the hero --- */
 .keke-stats-wrap {
