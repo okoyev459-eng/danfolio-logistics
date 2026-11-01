@@ -4,7 +4,10 @@ import Layout from '../../components/Layout.jsx'
 import CampusMap from '../../components/CampusMap.jsx'
 import { supabase } from '../../lib/supabase'
 import { useGeolocation } from '../../lib/useGeolocation'
-import { distanceMeters, validCoord } from '../../lib/geo'
+import { distanceMeters, formatDistance, validCoord } from '../../lib/geo'
+// Reuses the live-proximity badge styles (.bk-proximity / .bk-live) shared
+// with the booking screen.
+import './book.css'
 
 // Ride — the live status page for one booking.
 //
@@ -107,10 +110,19 @@ export default function Ride() {
     if (data.keke_id) {
       const [{ data: profile }, { data: k }, { data: pos }] = await Promise.all([
         supabase.from('profiles').select('full_name, avatar_url').eq('id', data.keke_id).maybeSingle(),
-        supabase.from('kekes').select('keke_number').eq('id', data.keke_id).maybeSingle(),
+        supabase.from('kekes')
+          .select('keke_number, rating, rating_count, lat, lng, last_seen')
+          .eq('id', data.keke_id)
+          .maybeSingle(),
         supabase.from('kekes').select('lat, lng, last_seen').eq('id', data.keke_id).maybeSingle(),
       ])
-      setKeke({ name: profile?.full_name, avatar: profile?.avatar_url, number: k?.keke_number })
+      setKeke({
+        name: profile?.full_name,
+        avatar: profile?.avatar_url,
+        number: k?.keke_number,
+        rating: k?.rating ?? null,
+        ratingCount: k?.rating_count ?? 0,
+      })
       if (pos?.lat && pos?.lng) setKekesPos(pos)
     }
 
@@ -254,6 +266,26 @@ export default function Ride() {
     }
   }
 
+  // Live proximity of the assigned keke while it is heading over — a real
+  // straight-line distance from the rider's heartbeat, never a made-up ETA.
+  // Hidden once the trip is under way or when coordinates are missing.
+  let kekeProximity = null
+  if (
+    kekePos &&
+    ['accepted', 'paid', 'arrived'].includes(ride.status) &&
+    validCoord(ride.from) &&
+    validCoord(kekePos)
+  ) {
+    // Measure against wherever the student is actually waiting (their own
+    // position when shared, otherwise the pick-up point they chose).
+    const reference =
+      geo.position && validCoord(geo.position) ? geo.position : ride.from
+    kekeProximity = {
+      meters: distanceMeters(reference, kekePos),
+      label: geo.position && validCoord(geo.position) ? 'from you' : 'from your pick-up',
+    }
+  }
+
   return (
     <Layout title="My ride">
       <section style={{ paddingTop: 12 }}>
@@ -295,9 +327,28 @@ export default function Ride() {
               <span className="muted">Your rider</span>
               <br />
               <b>{keke.name ?? 'Assigned rider'}</b>
+              {keke.ratingCount > 0 && (
+                <p className="muted" style={{ margin: '2px 0 0', fontSize: 13 }}>
+                  ★ {Number(keke.rating).toFixed(1)} · {keke.ratingCount} review
+                  {keke.ratingCount === 1 ? '' : 's'}
+                </p>
+              )}
+              {keke.ratingCount === 0 && (
+                <p className="muted" style={{ margin: '2px 0 0', fontSize: 13 }}>
+                  New rider — no reviews yet
+                </p>
+              )}
             </span>
             {keke.number && <span className="plate">{keke.number}</span>}
           </div>
+        )}
+
+        {/* Live keke proximity while it is heading to the student. */}
+        {kekeProximity && (
+          <p className="bk-proximity" role="status">
+            <span className="bk-live" aria-hidden="true" />
+            Keke {formatDistance(kekeProximity.meters)} {kekeProximity.label}
+          </p>
         )}
 
         {(routePoints.length > 0 || kekeMarkers.length > 0) && (

@@ -8,10 +8,13 @@ import { supabase } from '../../lib/supabase'
 // Spec section 4: locations = pickup | station | destination, mode drop |
 // along, with coordinates for the map. Admins have an ALL policy on both
 // tables, so writes go direct (RLS-checked).
+// `category` is the grouping label the student booking sheet shows (Academic
+// block, Hostel, Cafeteria, …): free text with suggestions from existing
+// categories, so admins can add new groups without a schema change.
 const KINDS = ['pickup', 'station', 'destination']
 const MODES = ['drop', 'along']
 
-const EMPTY = { name: '', kind: 'pickup', mode: 'drop', lat: '', lng: '', active: true }
+const EMPTY = { name: '', kind: 'pickup', mode: 'drop', category: '', lat: '', lng: '', active: true }
 
 export default function AdminLocations() {
   const [rows, setRows] = useState(null)
@@ -29,7 +32,7 @@ export default function AdminLocations() {
     const [{ data, error: readError }, { data: fareRows }] = await Promise.all([
       supabase
         .from('locations')
-        .select('id, name, kind, mode, lat, lng, active')
+        .select('id, name, kind, mode, category, lat, lng, active')
         .order('mode')
         .order('kind')
         .order('name'),
@@ -54,6 +57,7 @@ export default function AdminLocations() {
       name: row.name,
       kind: row.kind,
       mode: row.mode,
+      category: row.category ?? '',
       lat: row.lat ?? '',
       lng: row.lng ?? '',
       active: row.active,
@@ -77,6 +81,7 @@ export default function AdminLocations() {
       name: form.name.trim(),
       kind: form.kind,
       mode: form.mode,
+      category: form.category.trim() || 'Other',
       lat: form.lat === '' ? null : Number(form.lat),
       lng: form.lng === '' ? null : Number(form.lng),
       active: Boolean(form.active),
@@ -151,6 +156,7 @@ export default function AdminLocations() {
                     <th>Name</th>
                     <th>Kind</th>
                     <th>Mode</th>
+                    <th>Category</th>
                     <th>Coordinates</th>
                     <th>Status</th>
                     <th>Actions</th>
@@ -162,6 +168,7 @@ export default function AdminLocations() {
                       <td><b>{row.name}</b></td>
                       <td>{row.kind}</td>
                       <td>{row.mode}</td>
+                      <td>{row.category || 'Other'}</td>
                       <td className="muted">
                         {row.lat !== null && row.lng !== null
                           ? `${Number(row.lat).toFixed(4)}, ${Number(row.lng).toFixed(4)}`
@@ -230,11 +237,29 @@ export default function AdminLocations() {
 
       <section className="adm-panel">
         <h2>{editingId ? 'Edit point' : 'Add a point'}</h2>
+        <p className="muted" style={{ marginTop: -6, fontSize: 13 }}>
+          The category groups this point under a heading in the student's
+          booking list (e.g. Academic block, Hostel, Cafeteria).
+        </p>
         <form onSubmit={save}>
           <div className="adm-form-grid">
             <div>
               <label>Name</label>
               <input value={form.name} onChange={set('name')} required />
+            </div>
+            <div>
+              <label>Category</label>
+              <input
+                list="location-categories"
+                value={form.category}
+                onChange={set('category')}
+                placeholder="e.g. Hostel"
+              />
+              <datalist id="location-categories">
+                {[...new Set((rows ?? []).map((r) => r.category).filter(Boolean))]
+                  .sort()
+                  .map((c) => <option key={c} value={c} />)}
+              </datalist>
             </div>
             <div>
               <label>Kind</label>

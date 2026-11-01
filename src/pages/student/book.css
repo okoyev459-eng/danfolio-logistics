@@ -281,7 +281,110 @@
   padding: 3px 10px;
   font-size: 12px;
   font-weight: 700;
-  margin-left: 8px;
+  flex: 0 0 auto;
+}
+
+/* ---- Categorized picker ----
+   Locations are grouped under the admin's category label (Academic block,
+   Hostel, Cafeteria, …), each group headed by its own row. */
+.bk-group { margin-bottom: 4px; }
+.bk-cat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #1e3a8a;
+  opacity: 0.6;
+  margin: 12px 2px 6px;
+}
+.bk-cat span {
+  background: #f1f5f9;
+  border-radius: 8px;
+  padding: 2px 8px;
+  font-size: 11px;
+}
+.bk-group .bk-list { gap: 8px; }
+.bk-group .bk-opt { animation: bk-fade 0.24s ease both; }
+@keyframes bk-fade {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---- Ride-type sheet (mockup artboard 3) ---- */
+.bk-type {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  margin: 0 0 10px;
+  padding: 16px;
+  background: #fff;
+  color: #1e3a8a;
+  border: 2px solid #e2e8f0;
+  border-radius: 20px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+  animation: bk-fade 0.3s ease both;
+}
+.bk-type:nth-of-type(2) { animation-delay: 0.06s; }
+.bk-type:hover { border-color: #bfdbfe; background: #f8fbff; }
+.bk-type:active { transform: scale(0.985); }
+
+.bk-type-icon {
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: #dbeafe;
+  color: #1e3a8a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bk-type-icon-alt { background: #e0f2fe; color: #0369a1; }
+.bk-type-icon svg { width: 24px; height: 24px; }
+
+.bk-type-text { flex: 1 1 auto; min-width: 0; }
+.bk-type-text b {
+  display: block;
+  font-family: Poppins, system-ui, sans-serif;
+  font-size: 17px;
+  font-weight: 700;
+}
+.bk-type-text small { display: block; font-size: 13px; opacity: 0.7; }
+.bk-type-arrow { flex: 0 0 auto; font-size: 26px; line-height: 1; opacity: 0.4; }
+
+/* ---- Live keke proximity (post-booking) ---- */
+.bk-proximity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+  border-radius: 14px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  margin: 8px 0 0;
+}
+.bk-live {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #10b981;
+  flex: 0 0 auto;
+  animation: bk-blink 1.6s ease-in-out infinite;
+}
+@keyframes bk-blink {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.8); }
 }
 
 /* Search destinations field (mockup: "Where are you going?") */

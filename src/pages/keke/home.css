@@ -203,6 +203,76 @@
   margin: -8px 0 12px;
 }
 
+/* ---- Trip queue (rider carries up to 4 rides at once) ----------------- */
+.kr-trip-card {
+  background: #fff;
+  border: 2px solid #e2e8f0;
+  border-radius: 20px;
+  padding: 14px;
+  margin-bottom: 12px;
+  box-shadow: 0 6px 18px rgba(28, 51, 106, 0.06);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  animation: kr-trip-in 0.3s cubic-bezier(0.22, 0.9, 0.24, 1) both;
+}
+.kr-trip-card.kr-trip-sel {
+  border-color: #2865f5;
+  box-shadow: 0 8px 22px rgba(40, 101, 245, 0.16);
+}
+.kr-trip-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.kr-trip-head > span:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.kr-trip-head strong {
+  font-family: Poppins, Inter, sans-serif;
+  font-size: 15px;
+  color: #1e3a8a;
+}
+.kr-trip-head span span {
+  font-size: 13px;
+  color: #64748b;
+}
+.kr-trip-tag {
+  flex: 0 0 auto;
+  background: #eff6ff;
+  color: #1e3a8a;
+  border-radius: 10px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+.kr-trip-card .kr-call { margin-top: 10px; }
+.kr-trip-card .ko-accept { margin-top: 8px; }
+.kr-trip-card .ko-code { margin-top: 8px; }
+
+@keyframes kr-trip-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kr-trip-card { animation: none; transition: none; }
+}
+
+
 /* ---- Trip screen (K7): navy header + avatar --------------------------- */
 .keke-trip-app {
   padding-bottom: 0;

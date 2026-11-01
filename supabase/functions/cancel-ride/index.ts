@@ -186,16 +186,12 @@ Deno.serve(async (req) => {
       }, 409)
     }
 
-    // Free the assigned keke (guarded: only if it is still on_trip).
+    // Free the assigned keke — but only if this was their last active ride.
+    // A keke holds up to 4 passengers, so cancelling one booking must not
+    // pull a rider who is still carrying others out of their trip.
     if (updated.keke_id) {
       const { error: releaseError } = await adminClient
-        .from('kekes')
-        .update({
-          status: 'online',
-          last_seen: new Date().toISOString(),
-        })
-        .eq('id', updated.keke_id)
-        .eq('status', 'on_trip')
+        .rpc('release_keke_if_idle', { p_keke_id: updated.keke_id })
 
       if (releaseError) {
         console.error('cancel-ride: could not release rider:', releaseError)

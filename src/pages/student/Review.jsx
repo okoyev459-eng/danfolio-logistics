@@ -3,10 +3,20 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import Layout from '../../components/Layout.jsx'
 import { useAuth } from '../../lib/auth.jsx'
 import { supabase } from '../../lib/supabase'
+import './review.css'
 
 // Review — student rates a completed ride (spec: reviews, rating 1-5).
 // Only completed rides can be reviewed, and only once (reviews.ride_id is
-// UNIQUE in the schema).
+// UNIQUE in the schema). The trigger on `reviews` recomputes the rider's
+// kekes.rating + rating_count, so this rating shows up everywhere.
+
+const CAPTIONS = {
+  1: 'Terrible — sorry about that.',
+  2: 'Not great.',
+  3: 'It was okay.',
+  4: 'Good ride.',
+  5: 'Excellent — thank you!',
+}
 export default function Review() {
   const { rideId } = useParams()
   const navigate = useNavigate()
@@ -116,25 +126,23 @@ export default function Review() {
 
       <form className="card" onSubmit={submit}>
         <label>Rating</label>
-        <div style={{ display: 'flex', gap: 8, marginTop: 8 }} role="radiogroup" aria-label="Star rating">
+        <div className="rv-stars" role="radiogroup" aria-label="Star rating">
           {[1, 2, 3, 4, 5].map((star) => (
             <button
               key={star}
               type="button"
               aria-label={`${star} star${star > 1 ? 's' : ''}`}
               aria-pressed={rating === star}
+              className={'rv-star' + (star <= rating ? ' on' : '')}
               onClick={() => setRating(star)}
-              style={{
-                width: 52, height: 52, margin: 0, marginTop: 0, borderRadius: 14,
-                background: star <= rating ? 'var(--blue)' : '#e2e8f0',
-                color: star <= rating ? '#fff' : 'var(--navy)',
-                fontSize: 22, lineHeight: '52px', padding: 0,
-              }}
             >
               ★
             </button>
           ))}
         </div>
+        <p className="rv-caption" role="status">
+          {rating > 0 ? CAPTIONS[rating] : 'Tap a star to rate.'}
+        </p>
 
         <label style={{ marginTop: 16 }}>Comment (optional)</label>
         <textarea

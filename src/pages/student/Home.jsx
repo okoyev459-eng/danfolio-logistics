@@ -1,16 +1,34 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
-import Layout from '../../components/Layout.jsx'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import CampusMap from '../../components/CampusMap.jsx'
 import { useAuth } from '../../lib/auth.jsx'
 import { supabase } from '../../lib/supabase'
+import { validCoord } from '../../lib/geo'
+import './home.css'
 
-// Student home — greeting + book, active-ride banner, ride history tab and
-// profile tab (photo upload per spec G5; rides/reports list per G6).
+// Student home — mockup artboard "2 Home": the campus map IS the screen.
+//
+// Layered on top of it: a glass brand bar, a scrollable dock (greeting, real
+// quick-destination chips, active-ride banner, recent rides, Book a ride) and
+// the Home / Rides / Profile bottom nav. Rides and Profile open as a sheet
+// over the same map so the nav keeps its anchor.
+//
+// Every value on screen comes from Supabase: the chips are the first active
+// destinations in `locations`, recent rides are this student's `rides` rows,
+// and the map shows all campus points plus every keke with a fresh heartbeat
+// (online or already carrying passengers) — no invented markers.
 
 const ACTIVE_STATUSES = ['searching', 'accepted', 'paid', 'arrived', 'on_trip']
 
+// Riders heartbeat every 20s; anything unseen for 90s is not shown as live.
+const KEKE_FRESH_MS = 90000
+
+const TABS = ['Home', 'Rides', 'Profile']
+
 export default function StudentHome() {
   const { session, signOut } = useAuth()
+  const navigate = useNavigate()
+
   const [tab, setTab] = useState('Home')
   const [profile, setProfile] = useState(null)
   const [rides, setRides] = useState(null)
@@ -18,8 +36,15 @@ export default function StudentHome() {
   const [activeRide, setActiveRide] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
+  const [points, setPoints] = useState([])
+  const [kekes, setKekes] = useState([])
+  const [mapFailed, setMapFailed] = useState(false)
+  const [mapAttempt, setMapAttempt] = useState(0)
   const fileRef = useRef(null)
 
+  // ------------------------------------------------------------------
+  // Profile + ride history + reports
+  // ------------------------------------------------------------------
   useEffect(() => {
     let active = true
 
@@ -47,11 +72,66 @@ export default function StudentHome() {
       .select('id, reason, status, created_at')
       .order('created_at', { ascending: false })
       .limit(10)
-      .then(({ data }) => { if (active && data) setReports(data) })
+      .then(({ data }) => { if (active && data) setReports(data ?? []) })
 
     return () => { active = false }
   }, [session])
 
+  // ------------------------------------------------------------------
+  // Map data: campus points + every live keke (initial + Realtime + poll)
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    let active = true
+
+    async function loadPoints() {
+      const { data } = await supabase
+        .from('locations')
+        .select('id, name, kind, category, lat, lng')
+        .eq('active', true)
+        .order('name')
+      if (active && data) setPoints(data)
+    }
+
+    async function loadKekes() {
+      const { data } = await supabase
+        .from('kekes')
+        .select('id, keke_number, status, lat, lng, last_seen, rating, rating_count')
+      if (active && data) setKekes(data)
+    }
+
+    loadPoints()
+    loadKekes()
+    const timer = window.setInterval(loadKekes, 15000)
+
+    const channel = supabase
+      .channel('home-keke-positions')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'kekes' },
+        (payload) => {
+          if (!active) return
+          if (payload.eventType === 'DELETE') {
+            setKekes((rows) => rows.filter((k) => k.id !== payload.old?.id))
+          } else if (payload.new?.id) {
+            setKekes((rows) => {
+              const rest = rows.filter((k) => k.id !== payload.new.id)
+              return [...rest, payload.new]
+            })
+          }
+        },
+      )
+      .subscribe()
+
+    return () => {
+      active = false
+      window.clearInterval(timer)
+      supabase.removeChannel(channel)
+    }
+  }, [])
+
+  // ------------------------------------------------------------------
+  // Avatar upload (spec G5)
+  // ------------------------------------------------------------------
   async function uploadAvatar(e) {
     const file = e.target.files?.[0]
     e.target.value = ''
@@ -104,156 +184,264 @@ export default function StudentHome() {
     setProfile((p) => ({ ...(p ?? {}), avatar_url: url }))
   }
 
+  // ------------------------------------------------------------------
+  // Derived
+  // ------------------------------------------------------------------
   const name = (profile?.full_name ?? '').split(' ')[0]
   const initials = (profile?.full_name || '?').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()
 
-  const pastRides = (rides ?? []).filter((r) => !ACTIVE_STATUSES.includes(r.status))
+  const pastRides = useMemo(
+    () => (rides ?? []).filter((r) => !ACTIVE_STATUSES.includes(r.status)),
+    [rides],
+  )
 
+  // Quick chips: the first active destinations the admin has configured.
+  const chips = useMemo(() => {
+    const seen = new Set()
+    const out = []
+    for (const p of points) {
+      if (p.kind !== 'destination') continue
+      if (seen.has(p.name)) continue
+      seen.add(p.name)
+      out.push(p)
+      if (out.length === 3) break
+    }
+    return out
+  }, [points])
+
+  // All kekes with real coordinates and a fresh heartbeat — online riders and
+  // riders already carrying passengers both show, so the map never lies about
+  // how many kekes are actually around.
+  const liveKekes = useMemo(() => {
+    const now = Date.now()
+    return kekes.filter(
+      (k) =>
+        validCoord(k) &&
+        k.last_seen &&
+        now - new Date(k.last_seen).getTime() < KEKE_FRESH_MS,
+    )
+  }, [kekes])
+
+  const mapPoints = useMemo(
+    () => points.filter((p) => validCoord(p)),
+    [points],
+  )
+
+  function bookTo(destination) {
+    navigate('/student/book', { state: destination ? { presetTo: destination } : undefined })
+  }
+
+  // ------------------------------------------------------------------
+  // Render
+  // ------------------------------------------------------------------
   return (
-    <Layout title="Student">
-      <nav style={{ display: 'flex', gap: 8, marginBottom: 16 }} aria-label="Student navigation">
-        {['Home', 'Rides', 'Profile'].map((item) => (
+    <div className="sh">
+      <div className="sh-map">
+        {mapFailed ? (
+          <div className="bk-loading" role="alert" style={{ position: 'absolute', inset: 0 }}>
+            <p>The campus map could not load. Check your connection.</p>
+            <button
+              type="button"
+              className="secondary"
+              style={{ maxWidth: 220 }}
+              onClick={() => {
+                setMapFailed(false)
+                setMapAttempt((n) => n + 1)
+              }}
+            >
+              Try again
+            </button>
+          </div>
+        ) : (
+          <CampusMap
+            key={mapAttempt}
+            points={mapPoints}
+            kekes={liveKekes}
+            height="100%"
+            animate
+            onSelect={(point) => {
+              if (point.kind === 'destination') bookTo(point.name)
+            }}
+            onFail={() => setMapFailed(true)}
+          />
+        )}
+      </div>
+
+      <div className="sh-top">
+        <div className="sh-brand">Danfolio Logistics</div>
+        <button
+          type="button"
+          className="sh-icon"
+          onClick={signOut}
+          aria-label="Sign out"
+          title="Sign out"
+        >
+          ⏻
+        </button>
+      </div>
+
+      {tab === 'Home' && (
+        <div className="sh-dock">
+          {activeRide && (
+            <Link className="sh-active" to={`/student/ride/${activeRide.id}`}>
+              <span>
+                {String(activeRide.status).replaceAll('_', ' ')} ·{' '}
+                ₦{Number(activeRide.fare).toLocaleString()}
+              </span>
+              <b>{activeRide.from?.name} → {activeRide.to?.name}</b>
+              <span>Tap to open your live ride screen →</span>
+            </Link>
+          )}
+
+          <div className="sh-greet">
+            <h1>Hey {name || 'there'}, where to?</h1>
+            <p>
+              {liveKekes.length > 0
+                ? `${liveKekes.length} keke${liveKekes.length === 1 ? '' : 's'} live on campus right now.`
+                : 'Pick a destination below to get started.'}
+            </p>
+
+            {chips.length > 0 && (
+              <div className="sh-chips">
+                {chips.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className="sh-chip"
+                    onClick={() => bookTo(c.name)}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <button type="button" className="sh-book" onClick={() => bookTo(null)}>
+            Book a ride
+          </button>
+
+          <div className="sh-panel">
+            <h2>Recent rides</h2>
+            {rides === null && <p className="sh-empty">Loading…</p>}
+            {rides && rides.length === 0 && (
+              <p className="sh-empty">No rides yet. Book your first one.</p>
+            )}
+            {(rides ?? []).slice(0, 4).map((r) => (
+              <Link className="sh-recent-row" to={`/student/ride/${r.id}`} key={r.id}>
+                <span>
+                  <b>{r.from?.name} → {r.to?.name}</b>
+                  <small>
+                    {new Date(r.created_at).toLocaleDateString()} ·{' '}
+                    {String(r.status).replaceAll('_', ' ')}
+                  </small>
+                </span>
+                <span className="badge">₦{r.fare}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab !== 'Home' && (
+        <div className="sh-page">
+          <div className="page">
+            {tab === 'Rides' && (
+              <>
+                <h2>My rides</h2>
+                {rides === null && <p className="muted">Loading…</p>}
+                {rides && pastRides.length === 0 && (
+                  <div className="card muted">No finished rides yet.</div>
+                )}
+                {pastRides.map((r) => {
+                  const ticket = Array.isArray(r.ticket) ? r.ticket[0] : r.ticket
+                  return (
+                    <div className="card" key={r.id}>
+                      <div className="row">
+                        <b>{r.from?.name} → {r.to?.name}</b>
+                        <span className="badge">₦{r.fare}</span>
+                      </div>
+                      <p className="muted">
+                        {new Date(r.created_at).toLocaleString()} · {String(r.status).replaceAll('_', ' ')}
+                        {ticket && <> · ticket {ticket.ticket_no}</>}
+                      </p>
+                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                        <Link to={`/student/ride/${r.id}`}>Details</Link>
+                        {ticket && <Link to={`/student/ticket/${r.id}`}>Ticket</Link>}
+                        {r.status === 'completed' && <Link to={`/student/review/${r.id}`}>Rate</Link>}
+                        {r.status === 'completed' && <Link to={`/student/report/${r.id}`}>Report</Link>}
+                      </div>
+                    </div>
+                  )
+                })}
+
+                <h2 style={{ marginTop: 24 }}>My reports</h2>
+                {reports.length === 0 && <div className="card muted">You have not filed any reports.</div>}
+                {reports.map((rep) => (
+                  <div className="card row" key={rep.id}>
+                    <span>
+                      <b>{rep.reason}</b>
+                      <br />
+                      <span className="muted">{new Date(rep.created_at).toLocaleDateString()}</span>
+                    </span>
+                    <span className="badge">{rep.status}</span>
+                  </div>
+                ))}
+              </>
+            )}
+
+            {tab === 'Profile' && (
+              <>
+                <h2>Profile</h2>
+                <div className="card" style={{ textAlign: 'center' }}>
+                  {profile?.avatar_url
+                    ? <img className="avatar" src={profile.avatar_url} alt="Your profile" />
+                    : <div className="avatar" role="img" aria-label="Your profile photo">{initials}</div>}
+
+                  <h2>{profile?.full_name ?? '—'}</h2>
+                  {profile?.matric_no && <p className="muted">{profile.matric_no}</p>}
+                  <p className="muted">{session.user.email}</p>
+
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={uploadAvatar}
+                  />
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={uploading}
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    {uploading ? 'Uploading…' : 'Change profile photo'}
+                  </button>
+                  {uploadError && <div className="error">{uploadError}</div>}
+                </div>
+
+                <button type="button" className="secondary" onClick={signOut}>
+                  Sign out
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      <nav className="sh-nav" aria-label="Student navigation">
+        {TABS.map((item) => (
           <button
             key={item}
             type="button"
-            className={tab === item ? '' : 'secondary'}
-            style={{ height: 40, marginTop: 0, lineHeight: '40px', fontSize: 14 }}
+            className={tab === item ? 'active' : ''}
+            aria-current={tab === item ? 'page' : undefined}
             onClick={() => setTab(item)}
           >
             {item}
           </button>
         ))}
       </nav>
-
-      {tab === 'Home' && (
-        <>
-          <h2>Hey {name}, where to?</h2>
-
-          {activeRide && (
-            <Link className="plain" to={`/student/ride/${activeRide.id}`}>
-              <div className="fare" role="status">
-                <span className="badge">Active ride</span>
-                <h2 style={{ marginTop: 8 }}>
-                  {activeRide.from?.name} → {activeRide.to?.name}
-                </h2>
-                <p>
-                  Status: <b>{String(activeRide.status).replaceAll('_', ' ')}</b>
-                  {' '}· ₦{Number(activeRide.fare).toLocaleString()}
-                </p>
-                <p>Tap to open your live ride screen →</p>
-              </div>
-            </Link>
-          )}
-
-          {!activeRide && (
-            <Link className="btn" to="/student/book">Book a ride</Link>
-          )}
-
-          {activeRide && (
-            <Link className="btn secondary" to="/student/book">Book another ride</Link>
-          )}
-
-          <h2 style={{ marginTop: 28 }}>Recent rides</h2>
-          {rides === null && <p className="muted">Loading…</p>}
-          {rides && rides.length === 0 && (
-            <div className="card muted">No rides yet. Book your first one.</div>
-          )}
-          {(rides ?? []).slice(0, 5).map((r) => (
-            <Link className="plain" to={`/student/ride/${r.id}`} key={r.id}>
-              <div className="card row">
-                <span>
-                  {r.from?.name} to {r.to?.name}
-                  <br />
-                  <span className="muted">
-                    {new Date(r.created_at).toLocaleDateString()} · {String(r.status).replaceAll('_', ' ')}
-                  </span>
-                </span>
-                <span className="badge">₦{r.fare}</span>
-              </div>
-            </Link>
-          ))}
-        </>
-      )}
-
-      {tab === 'Rides' && (
-        <>
-          <h2>My rides</h2>
-          {rides === null && <p className="muted">Loading…</p>}
-          {rides && pastRides.length === 0 && (
-            <div className="card muted">No finished rides yet.</div>
-          )}
-          {pastRides.map((r) => {
-            const ticket = Array.isArray(r.ticket) ? r.ticket[0] : r.ticket
-            return (
-              <div className="card" key={r.id}>
-                <div className="row">
-                  <b>{r.from?.name} → {r.to?.name}</b>
-                  <span className="badge">₦{r.fare}</span>
-                </div>
-                <p className="muted">
-                  {new Date(r.created_at).toLocaleString()} · {String(r.status).replaceAll('_', ' ')}
-                  {ticket && <> · ticket {ticket.ticket_no}</>}
-                </p>
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                  <Link to={`/student/ride/${r.id}`}>Details</Link>
-                  {ticket && <Link to={`/student/ticket/${r.id}`}>Ticket</Link>}
-                  {r.status === 'completed' && <Link to={`/student/review/${r.id}`}>Rate</Link>}
-                  {r.status === 'completed' && <Link to={`/student/report/${r.id}`}>Report</Link>}
-                </div>
-              </div>
-            )
-          })}
-
-          <h2 style={{ marginTop: 24 }}>My reports</h2>
-          {reports.length === 0 && <div className="card muted">You have not filed any reports.</div>}
-          {reports.map((rep) => (
-            <div className="card row" key={rep.id}>
-              <span>
-                <b>{rep.reason}</b>
-                <br />
-                <span className="muted">{new Date(rep.created_at).toLocaleDateString()}</span>
-              </span>
-              <span className="badge">{rep.status}</span>
-            </div>
-          ))}
-        </>
-      )}
-
-      {tab === 'Profile' && (
-        <>
-          <h2>Profile</h2>
-          <div className="card" style={{ textAlign: 'center' }}>
-            {profile?.avatar_url
-              ? <img className="avatar" src={profile.avatar_url} alt="Your profile" />
-              : <div className="avatar" role="img" aria-label="Your profile photo">{initials}</div>}
-
-            <h2>{profile?.full_name ?? '—'}</h2>
-            {profile?.matric_no && <p className="muted">{profile.matric_no}</p>}
-            <p className="muted">{session.user.email}</p>
-
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              style={{ display: 'none' }}
-              onChange={uploadAvatar}
-            />
-            <button
-              type="button"
-              className="secondary"
-              disabled={uploading}
-              onClick={() => fileRef.current?.click()}
-            >
-              {uploading ? 'Uploading…' : 'Change profile photo'}
-            </button>
-            {uploadError && <div className="error">{uploadError}</div>}
-          </div>
-
-          <button type="button" className="secondary" onClick={signOut}>
-            Sign out
-          </button>
-        </>
-      )}
-    </Layout>
+    </div>
   )
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import CampusMap from '../../components/CampusMap.jsx'
 import BottomSheet from '../../components/BottomSheet.jsx'
 import { useAuth } from '../../lib/auth.jsx'
@@ -12,17 +12,22 @@ import './book.css'
 //
 // The map IS the screen: it fills the viewport, with a floating glass top bar
 // and a draggable bottom sheet (pickup / destination / fare / booking controls)
-// layered on top. The entire booking contract from the previous version is
+// layered on top. Entering without a mode (the "Book a ride" button) opens the
+// mockup's "How do you want to ride?" sheet over this same map — there is no
+// separate choose-type page — and picking Drop or Along continues in place.
+// The entire booking contract from the previous version is
 // preserved: the create-ride Edge Function is still the ONLY way a ride is
 // created, dispatch states (searching / no_ride_available) are handled the
 // same way, errors are extracted the same way, and ride status follows via
 // Realtime with polling fallback.
 //
 // Data sources (all real, no fake markers):
-//   - locations / fares        admin-managed tables (Supabase)
-//   - nearby keke riders       `kekes` rows with status='online' + fresh
-//                              heartbeat (last_seen), updated live via
-//                              Realtime (15s poll fallback)
+//   - locations / fares        admin-managed tables (Supabase), grouped by
+//                              the admin's `category` label with search
+//   - nearby keke riders       every `kekes` row with real coordinates and a
+//                              fresh heartbeat (online or already carrying
+//                              passengers), updated live via Realtime
+//                              (15s poll fallback)
 //   - my position               browser geolocation (permission states shown)
 //   - route + ETA              public OSRM with straight-line fallback
 //
@@ -42,6 +47,18 @@ const SHEET_SNAPS = [152, 0.46, 0.88]
 
 // Riders heartbeat every 20s; anything not seen for 90s is not "nearby".
 const KEKE_FRESH_MS = 90000
+
+// Locations arrive already grouped by the admin's category label; anything
+// without one lands in a visible "Other" group instead of vanishing.
+function groupByCategory(list) {
+  const groups = new Map()
+  for (const location of list) {
+    const key = (location.category ?? '').trim() || 'Other'
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(location)
+  }
+  return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+}
 
 const STATUS_COPY = {
   searching: {
@@ -78,9 +95,16 @@ const STATUS_COPY = {
   },
 }
 
-export default function BookFlow({ mode }) {
+export default function BookFlow({ initialMode = null }) {
   const { signOut } = useAuth()
   const geo = useGeolocation()
+  const routerLocation = useLocation()
+  const navigate = useNavigate()
+
+  // No mode yet = the mockup's Drop/Along sheet over the map. Choosing one
+  // flips this state and the booking continues on the same map, no reload.
+  const [mode, setMode] = useState(initialMode)
+  const choosingType = mode === null
 
   const [locations, setLocations] = useState([])
   const [locState, setLocState] = useState('loading') // loading | ready | error
@@ -93,6 +117,7 @@ export default function BookFlow({ mode }) {
 
   const [fromConfirmed, setFromConfirmed] = useState(false)
   const [query, setQuery] = useState('')
+  const [fromQuery, setFromQuery] = useState('')
   const [sheetIndex, setSheetIndex] = useState(0)
   const [message, setMessage] = useState('')
   const [booking, setBooking] = useState(false)
@@ -126,12 +151,17 @@ export default function BookFlow({ mode }) {
 
     async function loadLocations() {
       setLocState('loading')
-      const { data, error } = await supabase
+
+      let request = supabase
         .from('locations')
-        .select('id, name, kind, lat, lng')
-        .eq('mode', mode)
+        .select('id, name, kind, category, lat, lng')
         .eq('active', true)
-        .order('name')
+
+      // While the ride type is still open we load every active point so the
+      // map behind the sheet has the whole campus on it.
+      if (mode) request = request.eq('mode', mode)
+
+      const { data, error } = await request.order('category').order('name')
 
       if (!active) return
 
@@ -149,6 +179,38 @@ export default function BookFlow({ mode }) {
       active = false
     }
   }, [mode, locAttempt])
+
+  // ------------------------------------------------------------------
+  // Quick chip / recent-ride deep link: the home screen passes the chosen
+  // destination here so the student lands straight in step 2 with it filled.
+  // ------------------------------------------------------------------
+  const presetAppliedRef = useRef(false)
+
+  useEffect(() => {
+    const preset = routerLocation.state?.presetTo
+    if (!preset || presetAppliedRef.current || locState !== 'ready') return
+
+    presetAppliedRef.current = true
+    const match = locations.find(
+      (l) => l.kind === 'destination' && l.name.toLowerCase() === String(preset).toLowerCase(),
+    )
+
+    if (match) {
+      setTo(match)
+      navigate('/student/book', { state: null, replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routerLocation.state, locState, locations])
+
+  // A pre-selected destination only survives if it actually exists in the
+  // ride type the student just picked (Drop and Along have separate lists).
+  useEffect(() => {
+    if (choosingType || locState !== 'ready' || !to) return
+    if (locations.some((l) => l.id === to.id)) return
+    setTo(null)
+    setFare(null)
+    setFareState('idle')
+  }, [choosingType, locState, locations, to])
 
   // ------------------------------------------------------------------
   // Rejoin an already-active booking on mount (e.g. returning to this page)
@@ -319,20 +381,13 @@ export default function BookFlow({ mode }) {
   // Derived lists
   // ------------------------------------------------------------------
   const froms = useMemo(
-    () => locations.filter((l) => l.kind === fromKind),
-    [locations, fromKind],
+    () => (choosingType ? [] : locations.filter((l) => l.kind === fromKind)),
+    [locations, fromKind, choosingType],
   )
   const tos = useMemo(
-    () => locations.filter((l) => l.kind === 'destination' && l.name !== from?.name),
-    [locations, from?.name],
+    () => (choosingType ? [] : locations.filter((l) => l.kind === 'destination' && l.name !== from?.name)),
+    [locations, from?.name, choosingType],
   )
-
-  // Destination search field (mockup "Where are you going?").
-  const filteredTos = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return tos
-    return tos.filter((l) => l.name.toLowerCase().includes(q))
-  }, [tos, query])
 
   // Nearest-first ordering once the student shares their location.
   const sortedFroms = useMemo(() => {
@@ -344,9 +399,36 @@ export default function BookFlow({ mode }) {
     })
   }, [froms, geo.position])
 
+  // Search covers the name AND the category, so "hostel" surfaces the whole
+  // Hostel group from either box (mockup "Search destinations").
+  const matchesQuery = useCallback((location, raw) => {
+    const q = raw.trim().toLowerCase()
+    if (!q) return true
+    return (
+      location.name.toLowerCase().includes(q) ||
+      (location.category ?? '').toLowerCase().includes(q)
+    )
+  }, [])
+
+  const filteredFroms = useMemo(
+    () => sortedFroms.filter((l) => matchesQuery(l, fromQuery)),
+    [sortedFroms, fromQuery, matchesQuery],
+  )
+  const filteredTos = useMemo(
+    () => tos.filter((l) => matchesQuery(l, query)),
+    [tos, query, matchesQuery],
+  )
+
+  const fromGroups = useMemo(() => groupByCategory(filteredFroms), [filteredFroms])
+  const toGroups = useMemo(() => groupByCategory(filteredTos), [filteredTos])
+
   // Planning stage: pick-up first (explicit "Confirm pick-up"), then
   // destination + fare ("Step 2 of 2") which books the ride.
   const stage = activeRide ? null : !from || !fromConfirmed ? 'from' : 'to'
+
+  // The single closest pick-up point (only meaningful with location shared).
+  const nearestId =
+    geo.state === 'granted' && sortedFroms.length ? sortedFroms[0].id : null
 
   // Elapsed seconds on the "Searching · 0:12" counter (real time since the
   // ride row was created — never faked).
@@ -377,23 +459,44 @@ export default function BookFlow({ mode }) {
     [kekes, activeRide?.keke_id],
   )
 
-  // Map markers: during planning only 'online' riders; during a ride the
-  // assigned rider (highlighted, even if on_trip) plus nearby online ones.
+  // Map markers: EVERY live keke, free or already carrying passengers (a
+  // keke holds up to 4), with the assigned rider highlighted.
   const mapKekes = useMemo(() => {
     const assignedId = activeRide?.keke_id ?? null
-    return freshKekes
-      .filter((k) => (assignedId ? true : k.status === 'online'))
-      .map((k) => ({ ...k, highlight: Boolean(assignedId) && k.id === assignedId }))
+    return freshKekes.map((k) => ({
+      ...k,
+      highlight: Boolean(assignedId) && k.id === assignedId,
+    }))
   }, [freshKekes, activeRide?.keke_id])
+
+  // How far the assigned keke is from where the student is waiting.
+  // Straight-line distance against the live position — a real number, never
+  // a made-up ETA. Hidden once the trip is under way (the progress bar
+  // covers that) or when coordinates are missing.
+  const kekeProximity = useMemo(() => {
+    if (!assignedKeke || !validCoord(assignedKeke)) return null
+    if (!['accepted', 'paid', 'arrived'].includes(activeRide?.status)) return null
+
+    const atPickup = Boolean(activeRide?.from && validCoord(activeRide.from))
+    const target = atPickup ? activeRide.from : geo.position
+    if (!target) return null
+
+    return {
+      meters: distanceMeters(assignedKeke, target),
+      label: atPickup ? 'from your pick-up' : 'from you',
+    }
+  }, [assignedKeke, activeRide?.status, activeRide?.from, geo.position])
 
   const mapPoints = useMemo(() => {
     if (activeRide) {
       return [activeRide.from, activeRide.to].filter((p) => validCoord(p))
     }
+    // Ride-type sheet open: the whole campus sits behind the dim overlay.
+    if (choosingType) return locations.filter((p) => validCoord(p))
     if (to) return [from, to].filter((p) => validCoord(p))
     if (from) return [from, ...tos].filter((p) => validCoord(p))
     return froms.filter((p) => validCoord(p))
-  }, [activeRide, from, to, froms, tos])
+  }, [activeRide, choosingType, locations, from, to, froms, tos])
 
   const routeLine = useMemo(() => {
     const a = activeRide ? activeRide.from : from
@@ -403,8 +506,12 @@ export default function BookFlow({ mode }) {
 
   const selectedId = activeRide ? null : (to?.id ?? from?.id ?? null)
 
-  // FAB / attribution offset tracks the sheet's visible height.
-  const snap = SHEET_SNAPS[Math.min(sheetIndex, SHEET_SNAPS.length - 1)]
+  // FAB / attribution offset tracks the sheet's visible height. The
+  // ride-type sheet is one fixed snap; everything else drags.
+  const CHOOSING_SNAP = 0.56
+  const snap = choosingType
+    ? CHOOSING_SNAP
+    : SHEET_SNAPS[Math.min(sheetIndex, SHEET_SNAPS.length - 1)]
   const sheetBottomCss =
     snap < 1 ? `calc(${Math.round(snap * 100)}vh + 12px)` : `${snap + 12}px`
 
@@ -423,15 +530,69 @@ export default function BookFlow({ mode }) {
   // ------------------------------------------------------------------
   // Actions
   // ------------------------------------------------------------------
-  function pickPickup(location) {
-    if (location.id !== from?.id) {
-      setTo(null)
+  // One fare lookup shared by picking a destination and re-pricing after a
+  // different pick-up is chosen (a quick chip can pre-fill the destination).
+  const fareReqRef = useRef(0)
+
+  async function fetchFare(fromLoc, toLoc) {
+    const requestId = (fareReqRef.current += 1)
+
+    const { data, error } = await supabase
+      .from('fares')
+      .select('amount')
+      .eq('mode', mode)
+      .eq('from_id', fromLoc.id)
+      .eq('to_id', toLoc.id)
+      .maybeSingle()
+
+    if (requestId !== fareReqRef.current) return // a newer choice won
+
+    if (error) {
       setFare(null)
-      setFareState('idle')
-      setMessage('')
+      setFareState('missing')
+      setMessage(error.message)
+      return
     }
-    setFrom(location)
+
+    const amount = data?.amount ?? null
+    setFare(amount)
+    setFareState(amount === null || amount === undefined ? 'missing' : 'ready')
+  }
+
+  // Mockup artboard 3: the Drop/Along choice is a sheet over this map, so
+  // picking one continues on the same screen — no navigation, no remount.
+  function chooseMode(next) {
+    setMode(next)
+    setFrom(null)
     setFromConfirmed(false)
+    setFare(null)
+    setFareState('idle')
+    setQuery('')
+    setFromQuery('')
+    setMessage('')
+    setSheetIndex(1)
+  }
+
+  function pickPickup(location) {
+    const changed = location.id !== from?.id
+
+    if (changed) {
+      setMessage('')
+      if (to) {
+        // A destination is already chosen (quick chip, or re-picking the
+        // pick-up): keep it and re-price the route for this pick-up instead
+        // of throwing the student's choice away.
+        setFare(null)
+        setFareState('loading')
+        fetchFare(location, to)
+      } else {
+        setFare(null)
+        setFareState('idle')
+      }
+      setFromConfirmed(false)
+    }
+
+    setFrom(location)
   }
 
   async function pickDestination(location) {
@@ -441,22 +602,7 @@ export default function BookFlow({ mode }) {
     setMessage('')
     setSheetIndex((i) => Math.max(i, 1))
 
-    const { data, error } = await supabase
-      .from('fares')
-      .select('amount')
-      .eq('mode', mode)
-      .eq('from_id', from.id)
-      .eq('to_id', location.id)
-      .maybeSingle()
-
-    if (error) {
-      setFareState('missing')
-      setMessage(error.message)
-      return
-    }
-
-    setFare(data?.amount ?? null)
-    setFareState(data?.amount === null || data?.amount === undefined ? 'missing' : 'ready')
+    if (from) await fetchFare(from, location)
   }
 
   async function createRide() {
@@ -564,7 +710,8 @@ export default function BookFlow({ mode }) {
     setFareState('idle')
     setConfirmCancel(false)
     setRouteEta(null)
-    setSheetIndex(0)
+    // Back to the picker, expanded enough to actually show the list.
+    setSheetIndex(1)
     prevStatusRef.current = null
   }
 
@@ -578,6 +725,45 @@ export default function BookFlow({ mode }) {
   function locationDistance(location) {
     if (!geo.position || !validCoord(location)) return null
     return formatDistance(distanceMeters(geo.position, location))
+  }
+
+  // Both pickers render the same grouped shape: a category header with its
+  // locations underneath (mockup's categorized destination list).
+  function renderGroups(groups, selectedId, onPick, nearestId) {
+    return groups.map(([category, items]) => (
+      <div className="bk-group" key={category}>
+        <p className="bk-cat">
+          {category}
+          <span>{items.length}</span>
+        </p>
+        <div className="bk-list">
+          {items.map((location) => {
+            const dist = locationDistance(location)
+            return (
+              <button
+                key={location.id}
+                className={'bk-opt' + (selectedId === location.id ? ' sel' : '')}
+                onClick={() => onPick(location)}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', minWidth: 0, gap: 8 }}>
+                  <span
+                    style={{
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {location.name}
+                  </span>
+                  {nearestId === location.id && <span className="bk-near">Near you</span>}
+                </span>
+                {dist && <small>{dist}</small>}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    ))
   }
 
   function planningBody() {
@@ -618,33 +804,23 @@ export default function BookFlow({ mode }) {
             </p>
           )}
 
-          <div className="bk-list">
-            {sortedFroms.map((location, index) => {
-              const dist = locationDistance(location)
-              const isNearest = geo.state === 'granted' && index === 0 && dist
-              return (
-                <button
-                  key={location.id}
-                  className={'bk-opt' + (from?.id === location.id ? ' sel' : '')}
-                  onClick={() => pickPickup(location)}
-                >
-                  <span style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
-                    <span
-                      style={{
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {location.name}
-                    </span>
-                    {isNearest && <span className="bk-near">Near you</span>}
-                  </span>
-                  {dist && <small>{dist}</small>}
-                </button>
-              )
-            })}
-          </div>
+          <input
+            className="bk-search"
+            type="search"
+            placeholder={isDrop ? 'Search pick-up points' : 'Search stations'}
+            aria-label="Search pick-up locations"
+            value={fromQuery}
+            onChange={(e) => setFromQuery(e.target.value)}
+          />
+
+          {renderGroups(fromGroups, from?.id, pickPickup, nearestId)}
+
+          {fromGroups.length === 0 && (
+            <p className="bk-sub">
+              No pick-up matches “{fromQuery.trim()}”. Check the spelling or
+              pick from the full list.
+            </p>
+          )}
 
           <button
             type="button"
@@ -692,21 +868,8 @@ export default function BookFlow({ mode }) {
           onChange={(e) => setQuery(e.target.value)}
         />
 
-        <div className="bk-list">
-          {filteredTos.map((location) => {
-            const dist = locationDistance(location)
-            return (
-              <button
-                key={location.id}
-                className={'bk-opt' + (to?.id === location.id ? ' sel' : '')}
-                onClick={() => pickDestination(location)}
-              >
-                {location.name}
-                {dist && <small>{dist}</small>}
-              </button>
-            )
-          })}
-        </div>
+        {renderGroups(toGroups, to?.id, pickDestination, null)}
+
         {filteredTos.length === 0 && (
           <p className="bk-sub">
             No destination matches “{query.trim()}”. Check the spelling or pick
@@ -845,6 +1008,15 @@ export default function BookFlow({ mode }) {
           </div>
         )}
 
+        {/* Live proximity of the assigned keke — straight-line distance to
+            wherever the student is waiting, straight from its heartbeat. */}
+        {kekeProximity && (
+          <p className="bk-proximity" role="status">
+            <span className="bk-live" aria-hidden="true" />
+            Keke {formatDistance(kekeProximity.meters)} {kekeProximity.label}
+          </p>
+        )}
+
         {status === 'searching' && (
           <p className="bk-sub" role="status" aria-live="polite">
             <span className="bk-spin dark" aria-hidden="true" />
@@ -950,7 +1122,9 @@ export default function BookFlow({ mode }) {
     )
   }
 
-  const sheetTitle = activeRide
+  const sheetTitle = choosingType
+    ? 'How do you want to ride?'
+    : activeRide
     ? activeRide.noRide
       ? 'No keke available'
       : STATUS_COPY[activeRide.status]?.title ?? 'Your booking'
@@ -960,10 +1134,11 @@ export default function BookFlow({ mode }) {
         : 'Book Along'
       : 'Choose destination'
 
-  // Dim the map while the app is deciding (searching / awaiting payment),
-  // matching the mockup's overlay treatment.
+  // Dim the map while the app is deciding (searching / awaiting payment) and
+  // behind the ride-type sheet, matching the mockup's overlay treatment.
   const dimMap =
-    Boolean(activeRide) && ['searching', 'accepted'].includes(activeRide.status)
+    choosingType ||
+    (Boolean(activeRide) && ['searching', 'accepted'].includes(activeRide.status))
 
   // ------------------------------------------------------------------
   // Render
@@ -983,7 +1158,7 @@ export default function BookFlow({ mode }) {
           userLocation={geo.position}
           userAccuracy={geo.accuracy}
           onSelect={(point) => {
-            if (activeRide) return
+            if (activeRide || choosingType) return
             if (stage === 'from' && point.kind === fromKind) pickPickup(point)
             else if (stage === 'to' && point.kind === 'destination') {
               pickDestination(point)
@@ -1007,10 +1182,17 @@ export default function BookFlow({ mode }) {
       )}
 
       <div className="bk-top">
-        <Link className="bk-back" to="/student/book" aria-label="Back">
+        <Link
+          className="bk-back"
+          to={choosingType ? '/student' : '/student/book'}
+          aria-label="Back"
+        >
           ‹
         </Link>
-        <div className="bk-title">Danfolio · {isDrop ? 'Drop' : 'Along'}</div>
+        <div className="bk-title">
+          Danfolio ·{' '}
+          {choosingType ? 'Book a ride' : isDrop ? 'Drop' : 'Along'}
+        </div>
         <button
           type="button"
           className="bk-signout"
@@ -1098,21 +1280,70 @@ export default function BookFlow({ mode }) {
         </div>
       )}
 
-      <BottomSheet
-        snaps={SHEET_SNAPS}
-        index={sheetIndex}
-        onIndexChange={setSheetIndex}
-        ariaLabel="Booking details"
-        header={
-          <>
+      {choosingType ? (
+        // Mockup artboard 3: map + dim overlay + the Drop/Along sheet.
+        // Choosing one continues on this same map — no separate page.
+        <BottomSheet
+          snaps={[CHOOSING_SNAP]}
+          index={0}
+          ariaLabel="Choose ride type"
+          header={
             <div className="bk-step" style={{ margin: 0 }}>
               {sheetTitle}
             </div>
-          </>
-        }
-      >
-        {activeRide ? rideBody() : planningBody()}
-      </BottomSheet>
+          }
+        >
+          <p className="bk-sub">
+            Pick the ride type that fits your trip. You choose the exact
+            points on the next step.
+          </p>
+
+          <button type="button" className="bk-type" onClick={() => chooseMode('drop')}>
+            <span className="bk-type-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 21s-7-6.1-7-11a7 7 0 1 1 14 0c0 4.9-7 11-7 11z" />
+                <circle cx="12" cy="10" r="2.5" />
+              </svg>
+            </span>
+            <span className="bk-type-text">
+              <b>Drop</b>
+              <small>Door-to-door pickup</small>
+            </span>
+            <span className="bk-type-arrow" aria-hidden="true">›</span>
+          </button>
+
+          <button type="button" className="bk-type" onClick={() => chooseMode('along')}>
+            <span className="bk-type-icon bk-type-icon-alt" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="6" cy="6" r="2.5" />
+                <circle cx="18" cy="18" r="2.5" />
+                <path d="M6 8.5v4a5 5 0 0 0 5 5h4.5" />
+              </svg>
+            </span>
+            <span className="bk-type-text">
+              <b>Along</b>
+              <small>Join at a ride station</small>
+            </span>
+            <span className="bk-type-arrow" aria-hidden="true">›</span>
+          </button>
+        </BottomSheet>
+      ) : (
+        <BottomSheet
+          snaps={SHEET_SNAPS}
+          index={sheetIndex}
+          onIndexChange={setSheetIndex}
+          ariaLabel="Booking details"
+          header={
+            <>
+              <div className="bk-step" style={{ margin: 0 }}>
+                {sheetTitle}
+              </div>
+            </>
+          }
+        >
+          {activeRide ? rideBody() : planningBody()}
+        </BottomSheet>
+      )}
     </div>
   )
 }

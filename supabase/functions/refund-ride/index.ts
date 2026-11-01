@@ -83,14 +83,9 @@ Deno.serve(async (req) => {
     if (ride.status === 'refunded' && payment.status === 'refunded') {
       // Retry-safe cleanup if an earlier attempt did not release the rider.
       if (ride.keke_id) {
-        const { error } = await admin
-          .from('kekes')
-          .update({
-            status: 'online',
-            last_seen: new Date().toISOString(),
-          })
-          .eq('id', ride.keke_id)
-          .eq('status', 'on_trip')
+        const { error } = await admin.rpc('release_keke_if_idle', {
+          p_keke_id: ride.keke_id,
+        })
 
         if (error) throw error
       }
@@ -196,14 +191,11 @@ Deno.serve(async (req) => {
     }
 
     if (ride.keke_id) {
-      const { error: releaseError } = await admin
-        .from('kekes')
-        .update({
-          status: 'online',
-          last_seen: new Date().toISOString(),
-        })
-        .eq('id', ride.keke_id)
-        .eq('status', 'on_trip')
+      // Only returns the rider to 'online' when this refund ended their last
+      // active ride — a keke holds up to 4 passengers at once.
+      const { error: releaseError } = await admin.rpc('release_keke_if_idle', {
+        p_keke_id: ride.keke_id,
+      })
 
       if (releaseError) {
         console.error('Could not release rider after refund:', releaseError)
