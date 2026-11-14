@@ -37,12 +37,20 @@ export default function Ticket() {
 
   const { ride, keke, ticket } = data
 
+  // A cancelled or refunded ride keeps its ticket row, but the slip is no longer valid.
+  const voided = ride.status === 'cancelled' || ride.status === 'refunded'
+  const heading = voided
+    ? (ride.status === 'refunded' ? 'Payment refunded' : 'Ride cancelled')
+    : ticket ? 'Payment received' : 'No ticket yet'
+
   return (
     <Layout title="Student">
       <Link to="/student">← Back</Link>
       <div style={{ textAlign: 'center', margin: '16px 0' }}>
-        <h2>{ticket ? 'Payment received' : 'No ticket yet'}</h2>
-        <div className="muted">Show this slip to your keke rider</div>
+        <h2>{heading}</h2>
+        <div className="muted">
+          {voided ? 'This slip is void. Do not use it for a ride.' : 'Show this slip to your keke rider'}
+        </div>
       </div>
 
       {ticket && (
@@ -62,7 +70,7 @@ export default function Ticket() {
           )}
           <div className="rowline"><span className="muted">Paid</span><span className="badge">₦{ride.fare}</span></div>
           <div className="rowline"><span className="muted">Date</span><span>{new Date(ride.created_at).toLocaleString()}</span></div>
-          <div className="rowline"><span className="muted">Status</span><b>{ticket.status === 'used' ? 'Used' : 'Unused'}</b></div>
+          <div className="rowline"><span className="muted">Status</span><b>{voided ? 'Void' : ticket.status === 'used' ? 'Used' : 'Unused'}</b></div>
           <div className="dash" />
           <div className="muted" style={{ textAlign: 'center' }}>
             Keep this slip. It is your proof of payment if there is any dispute.
@@ -70,7 +78,7 @@ export default function Ticket() {
         </div>
       )}
 
-      {ticket && ticket.status === 'unused' && (
+      {ticket && ticket.status === 'unused' && !voided && (
         <Link className="btn" to={`/student/verify/${ride.id}`}>Show keke I booked</Link>
       )}
     </Layout>

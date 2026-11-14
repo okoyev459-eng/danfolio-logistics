@@ -88,6 +88,7 @@ export default function Ride() {
 
     if (rideError) {
       setError('Could not load this booking. Check your connection and try again.')
+      setLoading(false)
       return
     }
     if (!data) {
