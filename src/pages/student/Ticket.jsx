@@ -16,7 +16,14 @@ export default function Ticket() {
         .select('id, fare, mode, status, created_at, keke_id, from:locations!rides_from_id_fkey(name), to:locations!rides_to_id_fkey(name), ticket:tickets(ticket_no, status)')
         .eq('id', rideId)
         .single()
-      if (error) return setError('Could not load this ticket.')
+      if (error) {
+        // PGRST116 = `.single()` found no ride row for this id.
+        return setError(
+          error.code === 'PGRST116'
+            ? 'This ride could not be found — it may have been removed.'
+            : 'Could not load this ticket.',
+        )
+      }
 
       let keke = null
       if (ride.keke_id) {

@@ -4,10 +4,12 @@
 
 .kr-page {
   min-height: 100vh;
+  min-height: 100dvh;
   background: #f5f8ff;
   color: #1e3a8a;
   padding: 28px 16px 48px;
   font-family: Inter, system-ui, sans-serif;
+  overflow-x: hidden;
 }
 
 .keke-offer-open {

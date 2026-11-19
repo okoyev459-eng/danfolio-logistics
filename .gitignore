@@ -4,3 +4,6 @@ dist
 .env.*
 !.env.example
 .DS_Store
+# Self-signed dev certificate for `npm run dev:https` (geolocation needs a
+# secure context on phones) — never committed, never deployed.
+.cert

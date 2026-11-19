@@ -86,6 +86,43 @@ a.plain { text-decoration: none; color: inherit; }
   0% { transform: scale(0.75); opacity: 0.9; }
   100% { transform: scale(1.6); opacity: 0; }
 }
+
+/* Keke heartbeat states (spec §3): amber = updating slowly, grey = no live
+   location (offline or no heartbeat). State colour wins over the highlight
+   fill; the "your rider" ring only animates while the position is live. */
+.km-keke-stale { background: #d97706; }
+.km-keke-offline {
+  background: #94a3b8;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.18);
+  opacity: 0.9;
+}
+.km-keke-stale.km-keke-hi::before,
+.km-keke-offline.km-keke-hi::before {
+  animation: none;
+  opacity: 0.55;
+  border-color: currentColor;
+}
+.km-keke-stale.km-keke-hi::before { color: #d97706; }
+.km-keke-offline.km-keke-hi::before { color: #94a3b8; }
+
+/* Marker hidden by the collision pass (its position is real; another
+   badge is drawn on top of it). */
+.km-collide { opacity: 0 !important; pointer-events: none !important; }
+
+/* Readable marker popups on mobile. */
+.maplibregl-popup-content {
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  border-radius: 12px;
+  padding: 8px 12px;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.22);
+}
+.maplibregl-popup-content b { color: #1e3a8a; }
+.km-state-live { color: #047857; font-weight: 700; }
+.km-state-stale { color: #b45309; font-weight: 700; }
+.km-state-unavailable,
+.km-state-offline { color: #64748b; font-weight: 700; }
 .km-user {
   width: 20px;
   height: 20px;

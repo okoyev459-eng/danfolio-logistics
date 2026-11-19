@@ -1,19 +1,31 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { circlePolygon, validCoord } from '../lib/geo'
+import { ROUTE_FALLBACK_NOTE } from '../lib/routing'
+import { routeCampusTrip } from '../lib/campusRouting'
+import { KEKE_STATE_LABELS, kekeMarkerState, positionFreshness } from '../lib/tracking'
+import { getCampusCamera, resetCampusCameraCache } from '../lib/campusSettings'
+import { supabase } from '../lib/supabase'
 
 // CampusMap — the app's only map renderer.
 //
 // Free stack only (no billing account, no API key):
 //   - MapLibre GL JS   rendering (BSD-3-Clause, in package.json)
-//   - OpenFreeMap       map tiles + style (https://openfreemap.org, no key)
+//   - OpenFreeMap       default map tiles + style (https://openfreemap.org)
 //   - OpenStreetMap     underlying map data (© OpenStreetMap contributors)
 //
+// Provider configuration (see docs/map-and-live-tracking.md):
+//   - VITE_MAP_STYLE_URL — any MapLibre style URL (tiles + style together);
+//   - VITE_ROUTING_URL   — any OSRM-compatible routing base (lib/routing.js);
+//   - campus centre/zoom — the admin's campus_settings row (DB), then
+//     VITE_MAP_CENTER / VITE_MAP_ZOOM, then the historical default.
+//
 // Routing and address search are deliberately separate concerns:
-//   - Routing: optional, via the public OSRM demo server, drawn as a line
-//     between two points. It can be rate-limited or unavailable; the map
-//     falls back to a straight line and says so in the UI.
+//   - Routing: via the configured OSRM-compatible provider, drawn as a real
+//     road path with distance + duration. If the provider fails, the map
+//     draws a DASHED direct line labelled as such — never passed off as a
+//     road route — and reports no ETA.
 //   - Address search: NOT provided. Students choose from the admin's fixed
 //     location lists (spec section 1), which is the product requirement.
 //
@@ -23,17 +35,138 @@ import { circlePolygon, validCoord } from '../lib/geo'
 //   - keke riders render as distinct vehicle badges (navy = nearby, blue +
 //     pulsing = your assigned rider via `highlight`);
 //   - the student's own position renders as a cyan dot with an accuracy halo.
+//   Markers are RECONCILED, not rebuilt: live position updates move the
+//   existing keke badge with a short display-only tween between two real GPS
+//   fixes (no intermediate coordinates are invented as data).
 //
 // Camera: the view auto-fits when the SET of pins changes (ids), not on
-// every live position tick, so a moving keke never yanks the camera.
-// Parents can also drive the camera imperatively via the ref API:
+//   every live position tick, so a moving keke never yanks the camera.
+//   Parents can drive the camera imperatively via the ref API:
 //   { zoomIn, zoomOut, recenter, fitPoints(points) }
 //
 // Attribution: MapLibre's AttributionControl is added explicitly and cannot
 // be disabled here — OSM/OpenFreeMap terms require it.
 
-const CAMPUS_CENTER = [4.5226, 8.4799] // Unilorin area; overridden by markers
-const OSRM_URL = 'https://router.project-osrm.org/route/v1/driving'
+// Liberty is a conventional, street-first style for the campus map.
+// It uses OpenFreeMap vector tiles backed by OpenStreetMap data.
+const FALLBACK_STYLE = 'https://tiles.openfreemap.org/styles/liberty'
+
+// Danfolio's own traced campus vectors live in public/maps. They start empty
+// intentionally and are populated only from verified campus mapping data.
+const CAMPUS_VECTOR_FILES = {
+  roads: '/maps/veritas-campus-roads.geojson',
+  footpaths: '/maps/veritas-campus-footpaths.geojson',
+  buildings: '/maps/veritas-campus-buildings.geojson',
+}
+
+const EMPTY_FEATURE_COLLECTION = { type: 'FeatureCollection', features: [] }
+
+async function loadCampusGeoJSON(url) {
+  try {
+    const response = await fetch(url, { cache: 'no-cache' })
+    if (!response.ok) return EMPTY_FEATURE_COLLECTION
+    const data = await response.json()
+    return data?.type === 'FeatureCollection' && Array.isArray(data.features)
+      ? data
+      : EMPTY_FEATURE_COLLECTION
+  } catch {
+    // The base map remains usable while local campus vectors are not yet
+    // available (for example, before the first mapping import).
+    return EMPTY_FEATURE_COLLECTION
+  }
+}
+
+function firstSymbolLayerId(map) {
+  return map.getStyle()?.layers?.find((layer) => layer.type === 'symbol')?.id
+}
+
+// Add Danfolio's campus vector sources + layers to an already-loaded
+// style. Idempotent (guards on getSource/getLayer), so a re-run after a
+// style reload adds exactly what is missing. Throws to the caller.
+function addCampusVectorLayers(map, { roads, footpaths, buildings }) {
+  const beforeId = firstSymbolLayerId(map)
+  const sources = [
+    ['danfolio-campus-roads', roads],
+    ['danfolio-campus-footpaths', footpaths],
+    ['danfolio-campus-buildings', buildings],
+  ]
+  for (const [id, data] of sources) {
+    if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data })
+  }
+
+  const add = (layer) => {
+    if (!map.getLayer(layer.id)) map.addLayer(layer, beforeId)
+  }
+
+  // Building footprints are deliberately understated so labels and
+  // location pins remain readable above them.
+  add({
+    id: 'danfolio-campus-buildings-fill',
+    type: 'fill',
+    source: 'danfolio-campus-buildings',
+    paint: { 'fill-color': '#CBD5E1', 'fill-opacity': 0.42 },
+  })
+  add({
+    id: 'danfolio-campus-buildings-outline',
+    type: 'line',
+    source: 'danfolio-campus-buildings',
+    paint: { 'line-color': '#64748B', 'line-width': 1, 'line-opacity': 0.8 },
+  })
+  add({
+    id: 'danfolio-campus-roads-casing',
+    type: 'line',
+    source: 'danfolio-campus-roads',
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: {
+      'line-color': '#FFFFFF',
+      'line-width': ['interpolate', ['linear'], ['zoom'], 13, 3, 18, 8],
+      'line-opacity': 0.96,
+    },
+  })
+  add({
+    id: 'danfolio-campus-roads-line',
+    type: 'line',
+    source: 'danfolio-campus-roads',
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: {
+      'line-color': [
+        'match', ['get', 'highway'],
+        'primary', '#D97706',
+        'secondary', '#D97706',
+        'tertiary', '#B7791F',
+        '#64748B',
+      ],
+      'line-width': ['interpolate', ['linear'], ['zoom'], 13, 1.5, 18, 4.5],
+      'line-opacity': 0.98,
+    },
+  })
+  add({
+    id: 'danfolio-campus-footpaths-line',
+    type: 'line',
+    source: 'danfolio-campus-footpaths',
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: {
+      'line-color': '#94A3B8',
+      'line-width': ['interpolate', ['linear'], ['zoom'], 14, 1, 19, 2.2],
+      'line-dasharray': [2, 2],
+      'line-opacity': 0.9,
+    },
+  })
+  // No road-name or building-name label layers: the brief keeps
+  // this map clean (subtle roads + outlines only) — street names
+  // and building labels would clutter the tracking view.
+}
+const FALLBACK_CENTER = [7.41431, 9.290626] // midpoint of supplied campus locations
+const FALLBACK_ZOOM = 14
+
+function envStyle() {
+  try {
+    const value = String(import.meta?.env?.VITE_MAP_STYLE_URL ?? '').trim()
+    return value || FALLBACK_STYLE
+  } catch {
+    return FALLBACK_STYLE
+  }
+}
 
 const KIND_COLORS = {
   pickup: '#1E3A8A',
@@ -46,11 +179,73 @@ const KEKE_SVG =
   'stroke-linecap="round" stroke-linejoin="round">' +
   '<path d="M5 11l1.5-4.2A2 2 0 0 1 8.4 5.5h7.2a2 2 0 0 1 1.9 1.3L19 11M5 11h14M5 11a2 2 0 0 0-2 2v3.5h2M19 11a2 2 0 0 1 2 2v3.5h-2M5 16.5V19m14-2.5V19M7.5 14h.5m8 0h.5"/></svg>'
 
-function makeKekeElement(highlight) {
+// Heartbeat state of one keke row — pure wrapper over tracking.js so every
+// screen (home, booking, ride) classifies live / stale / offline identically.
+function stateOf(keke) {
+  return kekeMarkerState({
+    status: keke.status,
+    // Only the GPS heartbeat proves a fresh position. General row updates
+    // (updated_at) must never make an old coordinate look live.
+    last_seen: keke.last_seen,
+  })
+}
+
+// State colour class: amber = updating slowly, grey = no live location.
+function stateClass(state) {
+  if (state === 'stale') return ' km-keke-stale'
+  if (state === 'offline' || state === 'unavailable') return ' km-keke-offline'
+  return ''
+}
+
+// Popup wording: state in plain words + the REAL heartbeat age (never a
+// claim like "live" off a five-minute-old fix).
+function escapePopupText(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[character])
+}
+
+function kekePopupHTML(keke, state) {
+  const stamp = keke.last_seen
+  const age = stamp ? positionFreshness(stamp).label : 'no GPS yet'
+  const label = KEKE_STATE_LABELS[state] ?? 'Location unknown'
+  return (
+    `<b>Keke ${escapePopupText(keke.keke_number)}</b>${keke.highlight ? ' · your rider' : ''}` +
+    `<br><span class="km-state-${escapePopupText(state)}">${escapePopupText(label)}</span> — ${escapePopupText(age)}`
+  )
+}
+
+function makeKekeElement(highlight, state) {
   const el = document.createElement('div')
-  el.className = 'km-keke' + (highlight ? ' km-keke-hi' : '')
+  el.className = 'km-keke' + stateClass(state) + (highlight ? ' km-keke-hi' : '')
   el.innerHTML = KEKE_SVG
   return el
+}
+
+// ---- Campus camera (admin's campus_settings row, cached per page load) ----
+// (cache lives in lib/campusSettings so the admin page can reset it)
+
+// Display-only tween between two REAL fixes (both endpoints are measured
+// GPS positions; the intermediate frames are animation, not data).
+const TWEEN_MS = 450
+const TWEEN_MAX_DEG = 0.005 // ~500 m — beyond that, snap instead of gliding
+function tweenMarker(marker, from, to) {
+  const start = performance.now()
+  const step = (t) => {
+    const p = Math.min(1, (t - start) / TWEEN_MS)
+    const eased = 1 - (1 - p) ** 2
+    marker.setLngLat([
+      from[0] + (to[0] - from[0]) * eased,
+      from[1] + (to[1] - from[1]) * eased,
+    ])
+    if (p < 1) marker._kmTween = requestAnimationFrame(step)
+    else marker._kmTween = null
+  }
+  marker._kmTween = requestAnimationFrame(step)
 }
 
 const CampusMap = forwardRef(function CampusMap(
@@ -69,15 +264,45 @@ const CampusMap = forwardRef(function CampusMap(
     navControls = true,
     onReady = null,
     onFail = null,
+    onMapClick = null,
   },
   ref,
 ) {
   const containerRef = useRef(null)
   const mapRef = useRef(null)
-  const markersRef = useRef([])
+  const pointMarkersRef = useRef(new Map())
+  const kekeMarkersRef = useRef(new Map())
   const userMarkerRef = useRef(null)
   const [failed, setFailed] = useState(false)
+  const [basemapWarning, setBasemapWarning] = useState('')
   const [routeNote, setRouteNote] = useState('')
+  // Style-dependent work (sources/layers) must wait until the style has
+  // loaded — MapLibre throws synchronously (crashing React) if addSource
+  // runs too early. Markers are DOM-only and may be created immediately.
+  const [styleReady, setStyleReady] = useState(false)
+  // Incremented on every style.load (including style reloads) so our
+  // sources/layers are re-added after MapLibre wipes them on setStyle.
+  const [styleEpoch, setStyleEpoch] = useState(0)
+  // `style.load` has fired for the CURRENT map = the style JSON is applied
+  // and addSource/addLayer are safe. Deliberately NOT isStyleLoaded(),
+  // which stays false until every viewport tile + sprite finishes loading
+  // (a slow network would then be misread as a dead map).
+  const styleLoadedRef = useRef(false)
+  const [retryKey, setRetryKey] = useState(0)
+  // Keke states must AGE even when no new rows arrive (a rider whose phone
+  // dies stops publishing — the badge must turn stale on its own).
+  const [stateTick, setStateTick] = useState(0)
+  useEffect(() => {
+    const timer = window.setInterval(() => setStateTick((n) => n + 1), 15000)
+    return () => window.clearInterval(timer)
+  }, [])
+  const cameraAppliedRef = useRef(false)
+  // Successful pin-driven fits. The campus-camera fallbacks (init effect +
+  // auto-fit effect) are async — they must never stomp a fit that landed
+  // while they were resolving, or the view snaps back to the campus
+  // default far away from the ride (the "wrong location" bug).
+  const dataFitRef = useRef(0)
+  const routeModeRef = useRef(null) // 'road' | 'direct' | null
 
   // Keep the latest callbacks in refs so effects never re-run just because
   // the parent re-created a function.
@@ -89,6 +314,10 @@ const CampusMap = forwardRef(function CampusMap(
   onFailRef.current = onFail
   const onSelectRef = useRef(onSelect)
   onSelectRef.current = onSelect
+  const onMapClickRef = useRef(onMapClick)
+  onMapClickRef.current = onMapClick
+  const suppressClickRef = useRef(0)
+  const interactedRef = useRef(false)
 
   const pointsKey = JSON.stringify(points)
   const kekesKey = JSON.stringify(kekes)
@@ -114,13 +343,90 @@ const CampusMap = forwardRef(function CampusMap(
       ok = true
     }
     if (ok) {
+      // Short map bands (the homepage's ⅓-screen map) need proportionally
+      // less padding — a flat 60 px on every side would shrink the campus
+      // to a dot on a 200 px-tall container.
+      const box = map.getContainer()
+      const padV = Math.max(18, Math.min(60, Math.round((box.clientHeight || 300) * 0.12)))
+      const padH = Math.max(18, Math.min(60, Math.round((box.clientWidth || 400) * 0.08)))
       map.fitBounds(bounds, {
-        padding: 60,
+        padding: { top: padV, bottom: padV, left: padH, right: padH },
         maxZoom: 16,
         duration: animate ? 900 : 0,
       })
     }
     return ok
+  }
+
+  // ---- Marker collision pass ---------------------------------------------
+  // MapLibre draws markers independently, so two pins at the same spot
+  // stack. On every camera move we project each marker's TRUE coordinate
+  // and dim only the occluded copies (`.km-collide`) — positions are never
+  // shifted, and priority keeps the important badges visible:
+  //   0 selected pin → 1 your rider → 2 other kekes → 3 location pins.
+  const collisionQueuedRef = useRef(false)
+  const updateCollisions = useCallback(() => {
+    const map = mapRef.current
+    if (!map) return
+    const items = []
+    for (const [, entry] of pointMarkersRef.current) {
+      items.push({
+        el: entry.marker.getElement(),
+        prio: entry.marker.getElement().classList.contains('km-point-sel') ? 0 : 3,
+        pos: entry.marker.getLngLat(),
+      })
+    }
+    for (const [, entry] of kekeMarkersRef.current) {
+      items.push({
+        el: entry.marker.getElement(),
+        prio: entry.highlight ? 1 : 2,
+        pos: entry.marker.getLngLat(),
+      })
+    }
+    items.sort((a, b) => a.prio - b.prio)
+
+    const kept = []
+    const THRESHOLD = 28 // px between marker centres ≈ visual overlap
+    for (const item of items) {
+      const p = map.project([item.pos.lng, item.pos.lat])
+      const clash = kept.some(
+        (k) => Math.hypot(k.x - p.x, k.y - p.y) < THRESHOLD,
+      )
+      if (clash) item.el.classList.add('km-collide')
+      else {
+        item.el.classList.remove('km-collide')
+        kept.push(p)
+      }
+    }
+  }, [])
+  const scheduleCollisions = useCallback(() => {
+    if (collisionQueuedRef.current) return
+    collisionQueuedRef.current = true
+    requestAnimationFrame(() => {
+      collisionQueuedRef.current = false
+      updateCollisions()
+    })
+  }, [updateCollisions])
+
+  function clearAllMarkers() {
+    for (const entry of pointMarkersRef.current.values()) {
+      entry.marker.remove()
+    }
+    pointMarkersRef.current.clear()
+    for (const entry of kekeMarkersRef.current.values()) {
+      if (entry.marker._kmTween) cancelAnimationFrame(entry.marker._kmTween)
+      entry.marker.remove()
+    }
+    kekeMarkersRef.current.clear()
+    userMarkerRef.current?.remove()
+    userMarkerRef.current = null
+  }
+
+  function retryMap() {
+    setFailed(false)
+    setStyleReady(false)
+    setBasemapWarning('')
+    setRetryKey((value) => value + 1)
   }
 
   // Imperative camera API for parent controls (zoom / recenter / fit).
@@ -153,9 +459,9 @@ const CampusMap = forwardRef(function CampusMap(
     try {
       map = new maplibregl.Map({
         container: containerRef.current,
-        style: 'https://tiles.openfreemap.org/styles/liberty',
-        center: CAMPUS_CENTER,
-        zoom: 14,
+        style: envStyle(),
+        center: FALLBACK_CENTER,
+        zoom: FALLBACK_ZOOM,
         attributionControl: false,
         interactive,
       })
@@ -166,101 +472,285 @@ const CampusMap = forwardRef(function CampusMap(
     }
 
     mapRef.current = map
-    map.addControl(new maplibregl.AttributionControl({ compact: true }))
+    map.addControl(new maplibregl.AttributionControl({
+      compact: true,
+      customAttribution: '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>',
+    }))
     if (interactive && navControls) {
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
     }
+    map.addControl(new maplibregl.ScaleControl({ maxWidth: 100, unit: 'metric' }), 'bottom-left')
 
-    map.on('error', (event) => {
-      // Tile/style load errors are non-fatal (a marker-less map still shows);
-      // a total style failure is handled by the timeout check below.
-      if (event?.error?.message?.includes?.('style')) {
-        setFailed(true)
-        onFailRef.current?.()
-      }
+    // A user gesture must never be overridden by a late camera apply.
+    const markInteracted = () => { interactedRef.current = true }
+    for (const type of ['mousedown', 'wheel', 'touchstart', 'keydown']) {
+      map.getContainer().addEventListener(type, markInteracted, { passive: true })
+    }
+
+    // Admin campus centre: apply once the settings row resolves, but only if
+    // the user has not already grabbed the map (and no pins have taken over).
+    getCampusCamera(supabase).then((camera) => {
+      if (mapRef.current !== map || interactedRef.current) return
+      if (cameraAppliedRef.current) return
+      if (dataFitRef.current > 0) return // pins already framed the view
+      cameraAppliedRef.current = true
+      map.jumpTo({
+        center: [camera.center.lng, camera.center.lat],
+        zoom: camera.zoom,
+      })
+    }).catch(() => {})
+
+    map.on('click', (event) => {
+      if (!onMapClickRef.current) return
+      if (Date.now() - suppressClickRef.current < 300) return // marker tap
+      onMapClickRef.current({
+        lat: Number(event.lngLat.lat.toFixed(6)),
+        lng: Number(event.lngLat.lng.toFixed(6)),
+      })
     })
 
-    map.once('load', () => onReadyRef.current?.())
+    // Keep occluded markers dimmed while the camera moves.
+    map.on('move', scheduleCollisions)
+    map.on('resize', scheduleCollisions)
 
-    // If the style never becomes loadable within 10s (blocked network, DNS),
-    // tell the user instead of showing a blank box.
-    const timer = window.setTimeout(() => {
-      if (!map.isStyleLoaded()) {
+    const onMapError = (event) => {
+      // A superseded/removed map (StrictMode double-mount, retry) must never
+      // fail the LIVE map, and an aborted request caused by our own teardown
+      // is not a basemap failure.
+      if (mapRef.current !== map) return
+      // Keep location markers visible, but never silently present them as a
+      // complete road map when the basemap's vector tiles or resources fail.
+      const message = String(event?.error?.message ?? '')
+      if (/abort/i.test(message)) return
+      const styleSources = map.getStyle()?.sources ?? {}
+      const styleSourceFailure = Boolean(
+        event?.sourceId && Object.prototype.hasOwnProperty.call(styleSources, event.sourceId),
+      )
+      const tileFailure = Boolean(event?.tile && (!event?.sourceId || styleSourceFailure))
+      const resourceFailure = /tile|sprite|glyph|fetch|network|failed to load/i.test(message)
+
+      if (styleSourceFailure || tileFailure || (styleLoadedRef.current && resourceFailure)) {
+        setBasemapWarning(
+          'Some road-map details could not be loaded. Check your connection and retry the map.',
+        )
+      } else if (!styleLoadedRef.current) {
         setFailed(true)
         onFailRef.current?.()
       }
-    }, 10000)
+    }
+    map.on('error', onMapError)
+
+    // The style can be ready even while a few vector tiles are still
+    // downloading. Add our route and accuracy layers at style.load rather
+    // than waiting for the full first map load.
+    // `on` (not `once`): a later style reload wipes our sources/layers, so
+    // every style.load bumps the epoch and re-runs the add-effects below.
+    const onStyleLoad = () => {
+      if (mapRef.current !== map) return
+      styleLoadedRef.current = true
+      setStyleReady(true)
+      setStyleEpoch((value) => value + 1)
+      onReadyRef.current?.()
+    }
+    map.on('style.load', onStyleLoad)
+
+    // A failed tile can still leave MapLibre reporting the viewport as
+    // idle. Keep the warning visible until the user retries the map; this
+    // avoids hiding a missing-road-map problem behind a successful style load.
+
+    // Distinguish a failed style from failed road tiles. The style-load
+    // ref tells us whether the style JSON ever arrived; viewport tiles can
+    // legitimately still be streaming in (isStyleLoaded() covers those and
+    // must not be used to fail the map). Slow tiles get a warning instead.
+    const timer = window.setTimeout(() => {
+      if (mapRef.current !== map) return
+      if (!styleLoadedRef.current) {
+        setFailed(true)
+        onFailRef.current?.()
+      } else if (!map.areTilesLoaded()) {
+        setBasemapWarning(
+          'The road map is taking too long to load. Check your connection and retry.',
+        )
+      }
+    }, 12000)
 
     return () => {
       window.clearTimeout(timer)
-      markersRef.current.forEach((m) => m.remove())
-      markersRef.current = []
-      userMarkerRef.current?.remove()
-      userMarkerRef.current = null
+      // Detach state-writing handlers BEFORE teardown: map.remove() aborts
+      // the in-flight style request, and that abort must not reach React.
+      map.off('error', onMapError)
+      map.off('style.load', onStyleLoad)
+      styleLoadedRef.current = false
+      for (const type of ['mousedown', 'wheel', 'touchstart', 'keydown']) {
+        map.getContainer().removeEventListener(type, markInteracted)
+      }
+      clearAllMarkers()
       map.remove()
       mapRef.current = null
     }
-  }, [interactive, navControls, failed])
+  }, [interactive, navControls, failed, retryKey])
 
-  // Sync location + keke markers with props (rebuild only, no camera move).
+  // Reconcile location + keke markers with props (update in place; never a
+  // full teardown — live GPS updates must not flicker).
   useEffect(() => {
     const map = mapRef.current
     if (!map || failed) return
 
-    markersRef.current.forEach((m) => m.remove())
-    markersRef.current = []
-
+    // ---- location pins ----
+    const seenPoints = new Set()
     for (const point of points) {
       if (!validCoord(point)) continue
+      const key = String(point.id ?? point.name)
+      seenPoints.add(key)
 
-      const color = KIND_COLORS[point.kind] ?? '#2563EB'
-      const marker = new maplibregl.Marker({ color })
-        .setLngLat([Number(point.lng), Number(point.lat)])
-        .setPopup(new maplibregl.Popup().setHTML(`<b>${point.name ?? 'Point'}</b>`))
-        .addTo(map)
+      let entry = pointMarkersRef.current.get(key)
+      if (!entry) {
+        const color = KIND_COLORS[point.kind] ?? '#2563EB'
+        const marker = new maplibregl.Marker({ color })
+          .setLngLat([Number(point.lng), Number(point.lat)])
+          .setPopup(new maplibregl.Popup().setHTML(`<b>${escapePopupText(point.name ?? 'Point')}</b>`))
+          .addTo(map)
 
-      if (selectedId && (point.id ?? point.name) === selectedId) {
-        marker.getElement().classList.add('km-point-sel')
+        if (onSelectRef.current) {
+          marker.getElement().addEventListener('click', () => {
+            suppressClickRef.current = Date.now()
+            onSelectRef.current?.(point)
+          })
+        }
+
+        entry = { marker, name: point.name }
+        pointMarkersRef.current.set(key, entry)
+      } else {
+        entry.marker.setLngLat([Number(point.lng), Number(point.lat)])
+        if (entry.name !== point.name) {
+          entry.name = point.name
+          entry.marker.getPopup().setHTML(`<b>${escapePopupText(point.name ?? 'Point')}</b>`)
+        }
       }
 
-      if (onSelectRef.current) {
-        marker.getElement().addEventListener('click', () => onSelectRef.current?.(point))
+      entry.marker
+        .getElement()
+        .classList.toggle('km-point-sel', Boolean(selectedId) && key === String(selectedId))
+    }
+    for (const [key, entry] of pointMarkersRef.current) {
+      if (!seenPoints.has(key)) {
+        entry.marker.remove()
+        pointMarkersRef.current.delete(key)
       }
-
-      markersRef.current.push(marker)
     }
 
+    // ---- keke badges ----
+    const seenKekes = new Set()
     for (const keke of kekes) {
       if (!validCoord(keke)) continue
+      const key = String(keke.id ?? `${keke.lat},${keke.lng}`)
+      seenKekes.add(key)
 
-      const marker = new maplibregl.Marker({
-        element: makeKekeElement(Boolean(keke.highlight)),
-        anchor: 'center',
-      })
-        .setLngLat([Number(keke.lng), Number(keke.lat)])
-        .setPopup(
-          new maplibregl.Popup().setHTML(
-            `<b>Keke ${keke.keke_number ?? ''}</b>${keke.highlight ? ' · your rider' : ''}`,
-          ),
-        )
-        .addTo(map)
+      const state = stateOf(keke)
+      const highlight = Boolean(keke.highlight)
 
-      markersRef.current.push(marker)
+      let entry = kekeMarkersRef.current.get(key)
+      if (!entry) {
+        const marker = new maplibregl.Marker({
+          element: makeKekeElement(highlight, state),
+          anchor: 'center',
+        })
+          .setLngLat([Number(keke.lng), Number(keke.lat)])
+          .setPopup(new maplibregl.Popup().setHTML(kekePopupHTML(keke, state)))
+          .addTo(map)
+        entry = { marker, highlight, state, number: keke.keke_number ?? '' }
+        kekeMarkersRef.current.set(key, entry)
+      } else {
+        const target = [Number(keke.lng), Number(keke.lat)]
+        const current = entry.marker.getLngLat()
+        const moved =
+          Math.abs(current.lng - target[0]) > 1e-9 ||
+          Math.abs(current.lat - target[1]) > 1e-9
+
+        if (moved) {
+          if (entry.marker._kmTween) cancelAnimationFrame(entry.marker._kmTween)
+          const bigJump =
+            Math.abs(current.lng - target[0]) > TWEEN_MAX_DEG ||
+            Math.abs(current.lat - target[1]) > TWEEN_MAX_DEG
+          if (bigJump) {
+            entry.marker._kmTween = null
+            entry.marker.setLngLat(target)
+          } else {
+            tweenMarker(entry.marker, [current.lng, current.lat], target)
+          }
+        }
+
+        const el = entry.marker.getElement()
+        const stateChanged = entry.state !== state
+        const highlightChanged = entry.highlight !== highlight
+        const numberChanged = entry.number !== (keke.keke_number ?? '')
+
+        if (highlightChanged) {
+          entry.highlight = highlight
+          el.classList.toggle('km-keke-hi', highlight)
+        }
+        if (stateChanged) {
+          entry.state = state
+          el.classList.remove('km-keke-stale', 'km-keke-offline')
+          if (state === 'stale') el.classList.add('km-keke-stale')
+          else if (state === 'offline' || state === 'unavailable') {
+            el.classList.add('km-keke-offline')
+          }
+        }
+
+        // Refresh the popup when its words could have changed (state,
+        // rider assignment, plate) or while it is open (age label ticks).
+        const popup = entry.marker.getPopup()
+        if (stateChanged || highlightChanged || numberChanged || popup?.isOpen?.()) {
+          entry.number = keke.keke_number ?? ''
+          popup.setHTML(kekePopupHTML(keke, state))
+        }
+      }
     }
-  }, [pointsKey, kekesKey, selectedId, failed])
+    for (const [key, entry] of kekeMarkersRef.current) {
+      if (!seenKekes.has(key)) {
+        if (entry.marker._kmTween) cancelAnimationFrame(entry.marker._kmTween)
+        entry.marker.remove()
+        kekeMarkersRef.current.delete(key)
+      }
+    }
+    scheduleCollisions()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pointsKey, kekesKey, selectedId, failed, stateTick, retryKey])
 
-  // Auto-fit the camera only when the SET of pins changes.
+  // Auto-fit the camera only when the SET of pins changes. Pin-less views
+  // (before the admin saves coordinates) fall back to the campus camera once.
   useEffect(() => {
     const map = mapRef.current
     if (!map || failed) return
-    fitList([...points, ...kekes])
+    // Once the user grabs the map, they keep it — never yank the view back
+    // (the Track-ride button re-frames explicitly through fitPoints).
+    if (interactedRef.current) return
+    const fitted = fitList([...points, ...kekes])
+    if (fitted) {
+      dataFitRef.current += 1
+      return
+    }
+    if (!cameraAppliedRef.current) {
+      getCampusCamera(supabase).then((camera) => {
+        if (mapRef.current !== map || interactedRef.current) return
+        // A pin-driven fit landed while this async fallback was resolving:
+        // the data must win over the default campus camera.
+        if (dataFitRef.current > 0) return
+        cameraAppliedRef.current = true
+        map.jumpTo({
+          center: [camera.center.lng, camera.center.lat],
+          zoom: camera.zoom,
+        })
+      }).catch(() => {})
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pointsIdsKey, kekesIdsKey, failed])
+  }, [pointsIdsKey, kekesIdsKey, failed, retryKey])
 
   // The student's own position: blue dot + accuracy halo.
   useEffect(() => {
     const map = mapRef.current
-    if (!map || failed) return
+    if (!map || failed || !styleReady) return
 
     userMarkerRef.current?.remove()
     userMarkerRef.current = null
@@ -294,20 +784,71 @@ const CampusMap = forwardRef(function CampusMap(
         paint: { 'fill-color': '#0EA5E9', 'fill-opacity': 0.12 },
       })
     }
-  }, [userKey, failed])
+  }, [userKey, failed, styleReady, styleEpoch, retryKey])
 
-  // Optional route line (OSRM demo server, with straight-line fallback).
+  // Danfolio's locally maintained campus vectors. These overlay the
+  // general basemap and become the campus-specific source of truth as the
+  // road/building survey is digitised. Empty starter GeoJSON files are valid.
   useEffect(() => {
     const map = mapRef.current
-    if (!map || failed) return
+    if (!map || failed || !styleReady) return
+    let cancelled = false
+
+    Promise.all([
+      loadCampusGeoJSON(CAMPUS_VECTOR_FILES.roads),
+      loadCampusGeoJSON(CAMPUS_VECTOR_FILES.footpaths),
+      loadCampusGeoJSON(CAMPUS_VECTOR_FILES.buildings),
+    ]).then(([roads, footpaths, buildings]) => {
+      if (cancelled || mapRef.current !== map) return
+
+      // The effect only runs after style.load (styleReady/styleEpoch), so
+      // the style normally accepts writes immediately. If a style swap is
+      // mid-flight, addSource/addLayer throw — retry briefly instead of
+      // gating on isStyleLoaded(), which waits for EVERY viewport tile and
+      // would silently drop our layers on a slow network. The next
+      // style.load bumps the epoch and re-runs this effect either way.
+      const addVectors = (attempt = 0) => {
+        if (cancelled || mapRef.current !== map) return
+        try {
+          addCampusVectorLayers(map, { roads, footpaths, buildings })
+        } catch (error) {
+          if (attempt >= 40) {
+            // A vector-layer failure must never take down the navigation map.
+            // eslint-disable-next-line no-console
+            console.warn('Campus vector layers not added:', error)
+            return
+          }
+          window.setTimeout(() => addVectors(attempt + 1), 50)
+        }
+      }
+      addVectors()
+    })
+
+    return () => { cancelled = true }
+  }, [failed, styleReady, styleEpoch])
+
+  // Route line via the configured routing provider. Real road path when the
+  // provider answers; dashed, clearly-labelled direct line otherwise (with
+  // NO ETA, so an estimate is never fabricated).
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || failed || !styleReady) return
 
     const sourceId = 'campus-route'
     const from = route?.from
     const to = route?.to
 
     const removeRoute = () => {
-      if (map.getLayer(sourceId)) map.removeLayer(sourceId)
-      if (map.getSource(sourceId)) map.removeSource(sourceId)
+      // On unmount the map-init cleanup (declared earlier) runs FIRST and
+      // has already called map.remove(), which deletes map.style. Never let
+      // a style-less map throw during teardown — React would unmount the
+      // ENTIRE app (blank page) on any navigation away from this page.
+      if (map.style) {
+        if (map.getLayer(sourceId)) map.removeLayer(sourceId)
+        if (map.getLayer(`${sourceId}-casing`)) map.removeLayer(`${sourceId}-casing`)
+        if (map.getSource(sourceId)) map.removeSource(sourceId)
+      }
+      routeModeRef.current = null
       setRouteNote('')
     }
 
@@ -317,52 +858,83 @@ const CampusMap = forwardRef(function CampusMap(
       return
     }
 
-    const coordinates = [
+    const direct = [
       [Number(from.lng), Number(from.lat)],
       [Number(to.lng), Number(to.lat)],
     ]
 
-    const drawRoute = (line, note) => {
+    // The layer is rebuilt when the mode flips (road ↔ direct) so paint
+    // properties are always created correct; otherwise just swap coordinates.
+    const drawRoute = (line, fallback) => {
+      const mode = fallback ? 'direct' : 'road'
+      const data = {
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: line },
+        properties: {},
+      }
+
+      if (map.getSource(sourceId) && routeModeRef.current !== mode) {
+        map.removeLayer(sourceId)
+        if (map.getLayer(`${sourceId}-casing`)) map.removeLayer(`${sourceId}-casing`)
+        map.removeSource(sourceId)
+      }
+
       if (map.getSource(sourceId)) {
-        map.getSource(sourceId).setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: line }, properties: {} })
+        map.getSource(sourceId).setData(data)
       } else {
-        map.addSource(sourceId, {
-          type: 'geojson',
-          data: { type: 'Feature', geometry: { type: 'LineString', coordinates: line }, properties: {} },
+        map.addSource(sourceId, { type: 'geojson', data })
+        map.addLayer({
+          id: `${sourceId}-casing`,
+          type: 'line',
+          source: sourceId,
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
+          paint: {
+            'line-color': '#FFFFFF',
+            'line-width': fallback ? 7 : 9,
+            'line-opacity': 0.95,
+            ...(fallback ? { 'line-dasharray': [1.5, 1.5] } : {}),
+          },
         })
         map.addLayer({
           id: sourceId,
           type: 'line',
           source: sourceId,
           layout: { 'line-cap': 'round', 'line-join': 'round' },
-          paint: { 'line-color': '#2563EB', 'line-width': 4, 'line-opacity': 0.8 },
+          paint: {
+            'line-color': fallback ? '#64748B' : '#2563EB',
+            'line-width': 5,
+            'line-opacity': fallback ? 0.7 : 0.85,
+            ...(fallback ? { 'line-dasharray': [1.5, 1.5] } : {}),
+          },
         })
       }
-      setRouteNote(note)
+      routeModeRef.current = mode
+      setRouteNote(fallback ? ROUTE_FALLBACK_NOTE : '')
     }
 
-    // Ask OSRM for a real path; fall back to a straight line on any failure.
+    // Local campus road graph first (it knows the imported roads — the
+    // remote OSRM server does not), then the configured OSRM provider,
+    // then a clearly-labelled direct line (never presented as a road route).
     let cancelled = false
-    const url =
-      `${OSRM_URL}/${coordinates[0][0]},${coordinates[0][1]};` +
-      `${coordinates[1][0]},${coordinates[1][1]}?overview=full&geometries=geojson`
 
-    fetch(url, { signal: AbortSignal.timeout(6000) })
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error('osrm unavailable'))))
-      .then((data) => {
+    routeCampusTrip(from, to)
+      .then((result) => {
         if (cancelled) return
-        const first = data?.routes?.[0]
-        const line = first?.geometry?.coordinates
-        if (!Array.isArray(line) || line.length < 2) throw new Error('no route')
-        drawRoute(line, '')
-        // ETA (spec C5): OSRM reports the route duration in seconds.
-        if (Number.isFinite(first?.duration)) {
-          onRouteInfoRef.current?.({ seconds: Math.round(first.duration) })
+        if (result && !result.fallback) {
+          drawRoute(result.coordinates, false)
+          onRouteInfoRef.current?.({
+            seconds: result.seconds,
+            meters: result.meters,
+            fallback: false,
+          })
+        } else {
+          drawRoute(direct, true)
+          onRouteInfoRef.current?.(null)
         }
       })
       .catch(() => {
         if (cancelled) return
-        drawRoute(coordinates, 'Live route unavailable — showing the direct path.')
+        drawRoute(direct, true)
         onRouteInfoRef.current?.(null)
       })
 
@@ -371,7 +943,7 @@ const CampusMap = forwardRef(function CampusMap(
       removeRoute()
       onRouteInfoRef.current?.(null)
     }
-  }, [JSON.stringify(route), failed])
+  }, [JSON.stringify(route), failed, styleReady, styleEpoch, retryKey])
 
   if (failed) {
     return (
@@ -379,8 +951,10 @@ const CampusMap = forwardRef(function CampusMap(
         className="card muted bk-map-failed"
         style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}
       >
-        The map could not be loaded. Check your connection — everything else on
-        this screen still works.
+        <div>
+          <p>The map could not be loaded. Check your connection — everything else on this screen still works.</p>
+          <button type="button" className="secondary" onClick={retryMap}>Try again</button>
+        </div>
       </div>
     )
   }
@@ -395,8 +969,15 @@ const CampusMap = forwardRef(function CampusMap(
       {routeNote && (
         <div className="muted km-route-note" style={{ fontSize: 12, marginTop: 4 }}>{routeNote}</div>
       )}
+      {basemapWarning && (
+        <div className="km-map-warning" role="status" aria-live="polite">
+          <span>{basemapWarning}</span>
+          <button type="button" onClick={retryMap}>Retry map</button>
+        </div>
+      )}
     </div>
   )
 })
 
+export { resetCampusCameraCache }
 export default CampusMap

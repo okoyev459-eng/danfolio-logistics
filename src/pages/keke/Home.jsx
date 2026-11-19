@@ -1,12 +1,79 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../../lib/auth.jsx'
 import { supabase } from '../../lib/supabase'
 import CampusMap from '../../components/CampusMap.jsx'
 import { distanceMeters, validCoord } from '../../lib/geo'
+import { shouldReroute } from '../../lib/routing'
+import { positionFreshness } from '../../lib/tracking'
+import { useRideTracking } from '../../lib/useRideTracking'
+import {
+  notificationPermission,
+  requestNotificationPermission,
+  useOfferNotice,
+} from '../../lib/notify'
+// ONE source of truth shared with dispatch_next_ride_request() and
+// respond_to_ride_request() on the server — the seat count can never drift
+// between the app and the dispatcher.
+import { MAX_ACTIVE_RIDES, canInterrupt, canRedispatch } from '../../../supabase/functions/_shared/policy.js'
 import './home.css'
 import './request.css'
 
 const tabs = ['Home', 'Trips', 'Earnings', 'Profile']
+
+// Active-trip selects. The interruption columns (interrupted_at /
+// interrupted_reason / replacement_at) only exist once the rider
+// cancellation migration is applied, so we probe for them ONCE and fall
+// back to the base columns on a database that does not have them yet —
+// without re-probing (and logging a400) on every poll. Statuses and
+// ordering are identical either way; only the incident banner (which reads
+// those columns) is unavailable before the migration.
+const TRIP_SELECT_BASE = `
+  id, status, fare, mode, booking_code, student_id, created_at,
+  from:locations!rides_from_id_fkey(name, lat, lng),
+  to:locations!rides_to_id_fkey(name, lat, lng),
+  tickets:tickets(ticket_no, status)
+`
+const TRIP_SELECT_WITH_INCIDENT = `
+  id, status, fare, mode, booking_code, student_id, created_at,
+  interrupted_at, interrupted_reason, replacement_at,
+  from:locations!rides_from_id_fkey(name, lat, lng),
+  to:locations!rides_to_id_fkey(name, lat, lng),
+  tickets:tickets(ticket_no, status)
+`
+
+// null = unknown yet; false = this database predates the migration.
+let incidentColumnsAvailable = null
+
+async function fetchActiveTrips(kekeId) {
+  const usedIncidentSelect = incidentColumnsAvailable !== false
+  const selectColumns = usedIncidentSelect ? TRIP_SELECT_WITH_INCIDENT : TRIP_SELECT_BASE
+
+  let { data, error } = await supabase
+    .from('rides')
+    .select(selectColumns)
+    .eq('keke_id', kekeId)
+    .in('status', ['accepted', 'paid', 'arrived', 'on_trip'])
+    .order('created_at', { ascending: true })
+
+  // 42703 = undefined_column: the migration adding the interruption
+  // columns has not been applied to this database yet. Remember it for
+  // every later load in this session, then retry with the base columns.
+  if (error?.code === '42703') {
+    incidentColumnsAvailable = false
+    ;({ data, error } = await supabase
+      .from('rides')
+      .select(TRIP_SELECT_BASE)
+      .eq('keke_id', kekeId)
+      .in('status', ['accepted', 'paid', 'arrived', 'on_trip'])
+      .order('created_at', { ascending: true }))
+  } else if (!error && usedIncidentSelect) {
+    // Only a SUCCESSFUL full select proves the columns exist — a base-select
+    // success must never flip the flag back (that caused a probe loop).
+    incidentColumnsAvailable = true
+  }
+
+  return { data, error }
+}
 
 function getPosition() {
   return new Promise((resolve) => {
@@ -33,12 +100,16 @@ function formatSession(ms) {
 }
 
 // Countdown ring for the offer modal (mockup K3/K5): a real SVG ring sized
-// from the request's own sent_at -> expires_at window.
-function OfferRing({ secondsLeft, totalSeconds }) {
+// from the request's own sent_at -> expires_at window. The timer reads
+// GREEN for an Along request and brand blue for a Drop, so the two request
+// types are tellable apart at a glance (task: along timer ≠ drop colour).
+function OfferRing({ secondsLeft, totalSeconds, along = false }) {
   const r = 58
   const circumference = 2 * Math.PI * r // ≈ 364.4 (mockup uses 365)
   const fraction = Math.max(0, Math.min(1, secondsLeft / Math.max(1, totalSeconds)))
   const mmss = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`
+  const ringColor = along ? '#16A34A' : '#2563EB'
+  const trackColor = along ? '#DCFCE7' : '#DBEAFE'
 
   return (
     <svg
@@ -49,13 +120,13 @@ function OfferRing({ secondsLeft, totalSeconds }) {
       aria-label={`${secondsLeft} seconds left`}
       style={{ display: 'block', margin: '0 auto' }}
     >
-      <circle cx="70" cy="70" r={r} fill="none" stroke="#DBEAFE" strokeWidth="10" />
+      <circle cx="70" cy="70" r={r} fill="none" stroke={trackColor} strokeWidth="10" />
       <circle
         cx="70"
         cy="70"
         r={r}
         fill="none"
-        stroke="#2563EB"
+        stroke={ringColor}
         strokeWidth="10"
         strokeLinecap="round"
         strokeDasharray={Math.round(circumference)}
@@ -105,6 +176,63 @@ function CodeBoxes({ value, onChange, onSubmit, busy }) {
   )
 }
 
+// Tracking status chip (spec sections 6/10): what the rider's device is
+// actually doing right now — real permission/publish states, never a fake
+// "sharing" light. `now` comes from the parent's 250ms clock for the
+// freshness label.
+function TrackingChip({ tracking, now }) {
+  const { phase, lastPublishedAt, error, retry } = tracking
+  if (phase === 'idle') return null
+
+  const fresh = positionFreshness(lastPublishedAt, { now })
+
+  let tone = 'live'
+  let text = ''
+
+  if (phase === 'starting') {
+    tone = 'wait'
+    text = 'Starting live location…'
+  } else if (phase === 'sharing') {
+    tone = fresh.state === 'live' ? 'live' : fresh.state === 'stale' ? 'wait' : 'bad'
+    text =
+      fresh.state === 'live'
+        ? `Sharing live location · ${fresh.label}`
+        : `Sharing paused · ${fresh.label}`
+  } else if (phase === 'denied') {
+    tone = 'bad'
+    text =
+      'Location access is blocked — students cannot see your keke. Allow location for this site, then retry.'
+  } else if (phase === 'insecure') {
+    tone = 'bad'
+    // Plain-http origins are never "allowed": the browser refuses location
+    // without prompting (the phone loads http://<lan-ip>:5175 while the
+    // laptop's localhost is exempt). Say the real cause and the real fix.
+    text =
+      'Location is blocked because this page is open over plain http:// — browsers only allow location on secure (HTTPS) pages. Open the app over HTTPS, then reload.'
+  } else if (phase === 'unsupported') {
+    tone = 'bad'
+    text = 'This device cannot share location (Geolocation API unavailable).'
+  } else if (phase === 'blocked') {
+    tone = 'flat'
+    text = 'Live tracking is not enabled yet — the database update has not been applied.'
+  } else if (phase === 'error') {
+    tone = 'bad'
+    text = `Location update failed${error ? `: ${error}` : ''}`
+  }
+
+  return (
+    <p className={`kr-track ${tone}`} role="status">
+      <span className="kr-track-dot" aria-hidden="true" />
+      <span>{text}</span>
+      {(phase === 'denied' || phase === 'error' || phase === 'blocked') && (
+        <button type="button" onClick={retry}>
+          Retry
+        </button>
+      )}
+    </p>
+  )
+}
+
 export default function KekeHome() {
   const { session, signOut } = useAuth()
   const userId = session?.user?.id
@@ -114,6 +242,9 @@ export default function KekeHome() {
   const [onlineSince, setOnlineSince] = useState(null)
   const [presenceBusy, setPresenceBusy] = useState(false)
   const [offer, setOffer] = useState(null)
+  // New-request notification opt-in (a tap, because browsers only grant
+  // permission from a user gesture). 'unsupported' hides the control.
+  const [notifPerm, setNotifPerm] = useState(() => notificationPermission())
   const [now, setNow] = useState(Date.now())
   const [tab, setTab] = useState('Home')
   const [busy, setBusy] = useState(false)
@@ -121,8 +252,8 @@ export default function KekeHome() {
   const [notice, setNotice] = useState('')
   const [loading, setLoading] = useState(true)
   const [handledExpiry, setHandledExpiry] = useState('')
-  // Every ride this rider is carrying right now — a keke holds up to 4 at
-  // once, so this is a list, not a single trip. `selectedTripId` decides
+  // Every ride this rider is carrying right now — a keke holds MAX_ACTIVE_RIDES
+  // at once, so this is a list, not a single trip. `selectedTripId` decides
   // which one the full-screen trip views (K6/K7/K8) act on.
   const [activeTrips, setActiveTrips] = useState([])
   const [selectedTripId, setSelectedTripId] = useState(null)
@@ -140,16 +271,17 @@ export default function KekeHome() {
   // compact trip queue. The back button on the trip screens returns here.
   const [tripView, setTripView] = useState('map')
 
-  // A keke carries 4 passengers: the dispatcher offers rides to free
-  // ('online') riders AND to riders already carrying some ('on_trip'), as
-  // long as fewer than 4 rides are held. `online` keeps meaning "free and
-  // fresh"; these flags are the broader availability picture.
+  // A keke carries MAX_ACTIVE_RIDES passengers (excluding the rider): the
+  // dispatcher offers rides to free ('online') riders AND to riders already
+  // carrying some ('on_trip'), as long as fewer than MAX_ACTIVE_RIDES rides
+  // are held. `online` keeps meaning "free and fresh"; these flags are the
+  // broader availability picture.
   const unavailable = rider?.status === 'unavailable'
   const onTrip = rider?.status === 'on_trip'
-  const atCapacity = activeTrips.length >= 4
+  const atCapacity = activeTrips.length >= MAX_ACTIVE_RIDES
   // Available for another offer: on duty (online, or on_trip with a fresh
-  // heartbeat) and holding fewer than 4 rides. The server enforces the same
-  // gate — this only mirrors it for the UI.
+  // heartbeat) and holding fewer than MAX_ACTIVE_RIDES rides. The server
+  // enforces the same gate — this only mirrors it for the UI.
   const availableForWork = Boolean(rider) && (online || onTrip) && !atCapacity
   // Heartbeat runs for every rider on duty — the dispatcher only offers
   // rides to riders seen in the last 75 seconds, on_trip included.
@@ -177,10 +309,10 @@ export default function KekeHome() {
         const lastSeen = data.last_seen ? new Date(data.last_seen).getTime() : 0
         const stillFresh = Date.now() - lastSeen < 75000
         // On duty = free ('online', fresh) OR carrying trips ('on_trip'):
-        // both states receive offers until the keke's 4 seats are full.
-        // Only a stale *free* row self-heals to offline — an 'on_trip' row
-        // keeps its state regardless of heartbeat age, because its trips are
-        // real (match-tick never touches it either).
+        // both states receive offers until the keke's MAX_ACTIVE_RIDES seats
+        // are full. Only a stale *free* row self-heals to offline — an
+        // 'on_trip' row keeps its state regardless of heartbeat age, because
+        // its trips are real (match-tick never touches it either).
         const shouldBeOnline =
           data.status === 'on_trip' || (data.status === 'online' && stillFresh)
 
@@ -291,7 +423,7 @@ export default function KekeHome() {
   }
 
   // Offers keep arriving while the rider is on duty — including mid-trip,
-  // until all 4 seats are taken (mirrors the server's capacity gate).
+  // until every seat is taken (mirrors the server's capacity gate).
   useEffect(() => {
     if (!userId || !availableForWork) {
       setOffer(null)
@@ -318,25 +450,15 @@ export default function KekeHome() {
     }
   }, [userId, availableForWork])
 
-  // Load every ride this rider is carrying (up to 4 at once), so the trip
-  // queue, the seat counter and the trip screens all agree. Read-only;
-  // every status change goes through a backend function (mark-arrived /
-  // start-trip / complete-trip).
+  // Load every ride this rider is carrying (up to MAX_ACTIVE_RIDES at once),
+  // so the trip queue, the seat counter and the trip screens all agree.
+  // Read-only; every status change goes through a backend function
+  // (mark-arrived / start-trip / complete-trip / rider-cancel-ride).
   useEffect(() => {
     let active = true
 
     async function loadActiveTrips() {
-      const { data, error: tripError } = await supabase
-        .from('rides')
-        .select(`
-          id, status, fare, booking_code, student_id, created_at,
-          from:locations!rides_from_id_fkey(name, lat, lng),
-          to:locations!rides_to_id_fkey(name, lat, lng),
-          tickets:tickets(ticket_no, status)
-        `)
-        .eq('keke_id', userId)
-        .in('status', ['accepted', 'paid', 'arrived', 'on_trip'])
-        .order('created_at', { ascending: true })
+      const { data, error: tripError } = await fetchActiveTrips(userId)
 
       if (!active) return
 
@@ -606,8 +728,9 @@ export default function KekeHome() {
     if (response === 'accepted' && data?.state === 'accepted') {
       setOffer(null)
       setNotice('Ride accepted! The booking has been added to your trips.')
-      // Stay on duty: a keke holds 4 passengers, so accepting one ride does
-      // not end availability — offers keep coming until all seats are full.
+      // Stay on duty: a keke holds MAX_ACTIVE_RIDES passengers, so accepting
+      // one ride does not end availability — offers keep coming until every
+      // seat is full.
       setTripView('map')
       setSelectedTripId(data.ride_id ?? null)
       setRider((current) => current ? { ...current, status: 'on_trip' } : current)
@@ -617,7 +740,7 @@ export default function KekeHome() {
     if (response === 'accepted' && data?.state === 'at_capacity') {
       setOffer(null)
       setNotice(
-        'Your keke is full — 4 active rides. Finish a trip before accepting more.'
+        `Your keke is full — ${MAX_ACTIVE_RIDES} active rides. Finish a trip before accepting more.`
       )
       return
     }
@@ -663,7 +786,8 @@ export default function KekeHome() {
   }
 
   // Trip actions act on a specific trip (the trip queue lets the rider work
-  // through up to 4 at once); defaults to the trip the screens show.
+  // through up to MAX_ACTIVE_RIDES at once); defaults to the trip the screens
+  // show.
   async function markArrived(trip = activeTrip) {
     if (!trip) return
     const result = await invokeTripFunction(
@@ -731,6 +855,55 @@ export default function KekeHome() {
           setOnlineSince(null)
         }
       }
+    }
+  }
+
+  // ---- Rider incident actions (Task 1) ---------------------------------
+  // PRE-boarding (accepted / paid / arrived): the student is NOT aboard, so
+  // the booking is handed back to dispatch (payment preserved, never
+  // double-charged). POST-boarding (on_trip): the student IS aboard — this
+  // records an interruption, it never cancels the trip.
+  // Every call goes to the rider-cancel-ride function; nothing here writes
+  // ride status directly.
+  async function reportIncident(trip, action, reason) {
+    if (!trip) return
+
+    const confirmText =
+      action === 'interrupt'
+        ? `Report a ${reason === 'emergency' ? 'n emergency' : ' breakdown'} while the student is aboard?\n\n` +
+          'The trip is recorded as interrupted, the student and admin are ' +
+          'notified, and your live location keeps sharing so the student ' +
+          'stays visible. An admin will arrange a replacement keke.'
+        : `Report: ${reason}?\n\n` +
+          'The student has not boarded, so this booking will be released ' +
+          'and re-offered to another keke. Any digital payment is preserved ' +
+          '— you are never charged again.'
+
+    if (!window.confirm(confirmText)) return
+
+    const labels = {
+      redispatch: 'Booking released — the system is re-offering it to another keke.',
+      interrupt: 'Interruption recorded. Keep sharing your location; a replacement is being arranged.',
+    }
+
+    const result = await invokeTripFunction(
+      'rider-cancel-ride',
+      { ride_id: trip.id, action, reason },
+      labels[action],
+    )
+
+    if (!result) return
+
+    // Re-read trips from the server instead of guessing the outcome: a
+    // re-dispatched booking leaves this rider's list, an interrupted trip
+    // stays with its new columns filled in.
+    const { data: rows } = await fetchActiveTrips(userId)
+
+    if (rows) {
+      setActiveTrips(rows)
+      setSelectedTripId((current) =>
+        current && rows.some((t) => t.id === current) ? current : rows[0]?.id ?? null
+      )
     }
   }
 
@@ -809,6 +982,23 @@ export default function KekeHome() {
     [rider?.lat, rider?.lng]
   )
 
+  // Live GPS publishing (spec section 6): real watchPosition fixes go to
+  // ride_locations for every active trip — only while trips are active.
+  const tracking = useRideTracking({ kekeId: userId, rides: activeTrips })
+
+  // One notification per request the moment a new offer lands (including a
+  // request already waiting when the rider opens the app). The offer modal
+  // still opens exactly as before — this is an extra signal, not a new flow.
+  useOfferNotice(offer)
+
+  // Bell tap: the explicit gesture browsers require before showing their
+  // permission prompt. Re-taps while granted do nothing.
+  async function askNotifications() {
+    if (notifPerm === 'unsupported' || notifPerm === 'granted') return
+    const result = await requestNotificationPermission()
+    setNotifPerm(result)
+  }
+
   // Trip-map geometry for K6 (to pick-up) and K8 (on trip).
   const tripFrom = activeTrip?.from
   const tripTo = activeTrip?.to
@@ -825,14 +1015,33 @@ export default function KekeHome() {
     [tripFrom, tripTo]
   )
 
+  // Route for K6 (rider → pick-up) and K8 (rider → destination). The origin
+  // follows the rider's live position, but a road route is only re-requested
+  // after a real ≥30 m move (routing.js) so GPS ticks don't hammer the OSRM
+  // demo server.
+  const tripRouteRef = useRef(null)
   const tripRoute = useMemo(() => {
     if (!activeTrip) return null
-    if (activeTrip.status === 'on_trip') {
-      return riderPos && validCoord(tripTo) ? { from: riderPos, to: tripTo } : null
+    const status = activeTrip.status
+    const desired =
+      status === 'on_trip'
+        ? riderPos && validCoord(tripTo)
+          ? { from: riderPos, to: tripTo }
+          : null
+        : riderPos && validCoord(tripFrom)
+          ? { from: riderPos, to: tripFrom }
+          : tripFrom && tripTo
+            ? { from: tripFrom, to: tripTo }
+            : null
+    if (!desired) return null
+
+    const gate = tripRouteRef.current
+    const destKey = String(desired.to?.id ?? `${desired.to?.lat},${desired.to?.lng}`)
+    if (gate && gate.destKey === destKey && gate.route) {
+      if (!shouldReroute(desired.from, gate.origin)) return gate.route
     }
-    if (riderPos && validCoord(tripFrom)) return { from: riderPos, to: tripFrom }
-    if (tripFrom && tripTo) return { from: tripFrom, to: tripTo }
-    return null
+    tripRouteRef.current = { origin: desired.from, destKey, route: desired }
+    return desired
   }, [activeTrip?.status, riderPos, tripFrom, tripTo])
 
   // Honest trip progress for K8: remaining straight-line distance vs the
@@ -887,44 +1096,65 @@ export default function KekeHome() {
   }, [earnings, earnPeriod])
 
   // ---- Offer modal (mockup K3 Drop / K5 Along) -------------------------
+  // Task 3: the ride type, route direction, passenger count and fare are
+  // all on screen at once so a rider can tell DROP from ALONG at a glance
+  // before accepting. Business rules are untouched — this is presentation.
   if (offer) {
     const isAlong = offer.ride.mode === 'along'
+    const pickupName = offer.ride.from?.name ?? 'Pickup location'
+    const destName = offer.ride.to?.name ?? 'Destination'
     return (
       <main className="keke-app keke-offer-open">
         <div className="ko-overlay" role="dialog" aria-modal="true" aria-labelledby="ko-title">
           <section className="ko-modal">
             <header className="ko-head">
-              <p className="ko-eyebrow">{offer.ride.from?.name ?? 'New request'}</p>
+              <span className={`ko-mode-badge ${isAlong ? 'is-along' : 'is-drop'}`}>
+                {isAlong ? 'ALONG' : 'DROP'}
+              </span>
+              <p className="ko-eyebrow">{pickupName}</p>
               <h2 id="ko-title">
                 {isAlong ? 'New Along request' : 'New Drop request'}
               </h2>
+              <p className="ko-mode-sub">
+                {isAlong
+                  ? 'Student boards at your pickup point and rides along this route to the destination.'
+                  : 'Direct trip: pick the student up and take them straight to the destination.'}
+              </p>
             </header>
 
             <div className="ko-ring-wrap" aria-live="polite">
-              <OfferRing secondsLeft={secondsLeft} totalSeconds={offerWindow} />
+              <OfferRing secondsLeft={secondsLeft} totalSeconds={offerWindow} along={isAlong} />
             </div>
 
             <div className="ko-body">
               <div className="ko-route">
                 <div>
-                  <small>Pick-up</small>
-                  <strong>{offer.ride.from?.name ?? 'Pickup location'}</strong>
+                  <small>{isAlong ? 'Board at (route start)' : 'Pick-up'}</small>
+                  <strong>{pickupName}</strong>
                 </div>
+                <div className="ko-route-arrow" aria-hidden="true">→</div>
                 <div>
-                  <small>Destination</small>
-                  <strong>{offer.ride.to?.name ?? 'Destination'}</strong>
+                  <small>{isAlong ? 'Ride along to' : 'Destination'}</small>
+                  <strong>{destName}</strong>
                 </div>
               </div>
 
               <div className="ko-fare">
-                <span>Fare</span>
+                <span>Fare {isAlong ? '(Along route price)' : '(Drop price)'}</span>
                 <strong>₦{Number(offer.ride.fare).toLocaleString()}</strong>
+              </div>
+
+              <div className="ko-seats">
+                <span>Seats in use</span>
+                <strong>
+                  {activeTrips.length} of {MAX_ACTIVE_RIDES} passengers
+                </strong>
               </div>
 
               <p className="ko-timer-note">
                 No reply in {offerWindow} seconds moves it to the next keke.
                 {activeTrips.length > 0 &&
-                  ` You are carrying ${activeTrips.length} of 4 rides.`}
+                  ` You are carrying ${activeTrips.length} of ${MAX_ACTIVE_RIDES} rides.`}
               </p>
 
               {error && <p role="alert" className="ko-error">{error}</p>}
@@ -984,15 +1214,15 @@ export default function KekeHome() {
     const studentName = tripStudent?.full_name ?? 'Student'
 
     // Trip queue — the destination of the back button on the full-screen
-    // trip views. A keke carries up to 4 passengers, so every active trip
-    // gets its own card with its own actions; tapping one selects it for
-    // the full-screen trip view.
+    // trip views. A keke carries up to MAX_ACTIVE_RIDES passengers, so every
+    // active trip gets its own card with its own actions; tapping one
+    // selects it for the full-screen trip view.
     if (tripView === 'card') {
       return (
         <main className="keke-app">
           <header className="keke-bar">
             <span className="keke-bar-title">
-              Trips · {activeTrips.length}/4 seats
+              Trips · {activeTrips.length}/{MAX_ACTIVE_RIDES} seats
             </span>
             <button
               type="button"
@@ -1005,6 +1235,7 @@ export default function KekeHome() {
 
           {error && <div className="keke-hint offline" role="alert">{error}</div>}
           {notice && <div className="keke-hint" role="status">{notice}</div>}
+          <TrackingChip tracking={tracking} now={now} />
 
           <section className="keke-content">
             {activeTrips.map((trip) => {
@@ -1012,6 +1243,11 @@ export default function KekeHome() {
               const student = tripStudents[trip.student_id] ?? null
               const isSelected = trip.id === activeTrip?.id
               const code = tripCodes[trip.id] ?? ''
+              const tripIsAlong = trip.mode === 'along'
+              // Pre-boarding: the student has not boarded, so the booking can
+              // be released and re-offered. Post-boarding: interruption only.
+              const preBoard = canRedispatch(trip.status)
+              const interruptible = canInterrupt(trip.status, trip.interrupted_at)
 
               return (
                 <div
@@ -1027,9 +1263,16 @@ export default function KekeHome() {
                     aria-pressed={isSelected}
                   >
                     <span>
-                      <strong>
-                        {trip.from?.name ?? 'Pick-up'} → {trip.to?.name ?? 'Destination'}
-                      </strong>
+                      <span className="kr-mode-row">
+                        <span
+                          className={`ko-mode-badge sm ${tripIsAlong ? 'is-along' : 'is-drop'}`}
+                        >
+                          {tripIsAlong ? 'ALONG' : 'DROP'}
+                        </span>
+                        <strong>
+                          {trip.from?.name ?? 'Pick-up'} → {trip.to?.name ?? 'Destination'}
+                        </strong>
+                      </span>
                       <span>
                         Booking {trip.booking_code} · ₦
                         {Number(trip.fare).toLocaleString()}
@@ -1052,6 +1295,19 @@ export default function KekeHome() {
                       {String(trip.status).replaceAll('_', ' ')}
                     </span>
                   </button>
+
+                  {trip.interrupted_at && (
+                    <div className="kr-interrupted" role="alert">
+                      <strong>
+                        Trip interrupted · {String(trip.interrupted_reason ?? 'breakdown')}
+                      </strong>
+                      <span>
+                        {trip.replacement_at
+                          ? 'Replacement keke assigned — continue the trip.'
+                          : 'A replacement is being arranged. Keep sharing your location so the student can be found.'}
+                      </span>
+                    </div>
+                  )}
 
                   {student?.phone && (
                     <a className="kr-call" href={`tel:${student.phone}`}>
@@ -1101,6 +1357,61 @@ export default function KekeHome() {
                       {busy ? 'Please wait…' : 'Complete trip'}
                     </button>
                   )}
+
+                  {/* Incident controls (Task 1): large, clearly separated
+                      from the primary action so a moving rider cannot hit
+                      them by accident. */}
+                  {(preBoard || interruptible) && (
+                    <div className="kr-incident">
+                      <span className="kr-incident-label">
+                        {interruptible
+                          ? 'Problem after the student boarded?'
+                          : 'Cannot continue this booking?'}
+                      </span>
+                      <div className="kr-incident-actions">
+                        {interruptible && (
+                          <>
+                            <button
+                              type="button"
+                              className="kr-incident-btn warn"
+                              disabled={busy}
+                              onClick={() => reportIncident(trip, 'interrupt', 'breakdown')}
+                            >
+                              Breakdown
+                            </button>
+                            <button
+                              type="button"
+                              className="kr-incident-btn danger"
+                              disabled={busy}
+                              onClick={() => reportIncident(trip, 'interrupt', 'emergency')}
+                            >
+                              Emergency
+                            </button>
+                          </>
+                        )}
+                        {preBoard && (
+                          <>
+                            <button
+                              type="button"
+                              className="kr-incident-btn warn"
+                              disabled={busy}
+                              onClick={() => reportIncident(trip, 'redispatch', 'breakdown')}
+                            >
+                              Breakdown — release booking
+                            </button>
+                            <button
+                              type="button"
+                              className="kr-incident-btn"
+                              disabled={busy}
+                              onClick={() => reportIncident(trip, 'redispatch', 'cancelled')}
+                            >
+                              Cancel booking
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -1124,6 +1435,7 @@ export default function KekeHome() {
 
     // K7 — Verify passenger (arrived at pick-up)
     if (activeTrip.status === 'arrived') {
+      const tripIsAlong = activeTrip.mode === 'along'
       return (
         <main className="keke-app keke-trip-app">
           <header className="keke-trip-head">
@@ -1139,6 +1451,9 @@ export default function KekeHome() {
               {studentName.charAt(0).toUpperCase()}
             </div>
             <h1>{studentName}</h1>
+            <span className={`ko-mode-badge ${tripIsAlong ? 'is-along' : 'is-drop'}`}>
+              {tripIsAlong ? 'ALONG' : 'DROP'}
+            </span>
             <p>
               {tripFrom?.name ?? 'Pick-up'} → {tripTo?.name ?? 'Destination'}
             </p>
@@ -1180,6 +1495,7 @@ export default function KekeHome() {
             </div>
 
             {error && <div className="keke-hint offline" role="alert">{error}</div>}
+            <TrackingChip tracking={tracking} now={now} />
 
             <button
               type="button"
@@ -1189,6 +1505,32 @@ export default function KekeHome() {
             >
               {busy ? 'Please wait…' : 'Start trip'}
             </button>
+
+            {canRedispatch(activeTrip.status) && (
+              <div className="kr-incident">
+                <span className="kr-incident-label">
+                  Cannot continue before the student boards?
+                </span>
+                <div className="kr-incident-actions">
+                  <button
+                    type="button"
+                    className="kr-incident-btn warn"
+                    disabled={busy}
+                    onClick={() => reportIncident(activeTrip, 'redispatch', 'breakdown')}
+                  >
+                    Breakdown — release booking
+                  </button>
+                  <button
+                    type="button"
+                    className="kr-incident-btn"
+                    disabled={busy}
+                    onClick={() => reportIncident(activeTrip, 'redispatch', 'cancelled')}
+                  >
+                    Cancel booking
+                  </button>
+                </div>
+              </div>
+            )}
 
             <button
               type="button"
@@ -1209,6 +1551,10 @@ export default function KekeHome() {
     // K6 (to pick-up) and K8 (on trip) share the map + sheet layout.
     const headingTo = activeTrip.status === 'on_trip'
     const paid = ['paid', 'arrived', 'on_trip'].includes(activeTrip.status)
+    const tripIsAlong = activeTrip.mode === 'along'
+    const showInterrupt = Boolean(activeTrip.interrupted_at)
+    const interruptibleTrip = canInterrupt(activeTrip.status, activeTrip.interrupted_at)
+    const preBoardTrip = canRedispatch(activeTrip.status)
 
     return (
       <main className="keke-trip-screen">
@@ -1231,6 +1577,9 @@ export default function KekeHome() {
           >
             ←
           </button>
+          <span className={`ko-mode-badge sm ${tripIsAlong ? 'is-along' : 'is-drop'}`}>
+            {tripIsAlong ? 'ALONG' : 'DROP'}
+          </span>
           <div className="keke-trip-pill">
             {headingTo
               ? tripEtaMinutes
@@ -1243,6 +1592,19 @@ export default function KekeHome() {
         </div>
 
         <section className="keke-trip-sheet" role="region" aria-label="Trip details">
+          {showInterrupt && (
+            <div className="kr-interrupted" role="alert">
+              <strong>
+                Trip interrupted · {String(activeTrip.interrupted_reason ?? 'breakdown')}
+              </strong>
+              <span>
+                {activeTrip.replacement_at
+                  ? 'Replacement keke assigned — continue the trip.'
+                  : 'A replacement is being arranged. Keep sharing your location so the student can be found.'}
+              </span>
+            </div>
+          )}
+
           {!headingTo && (
             <div className="kr-student-row">
               <div className="kr-avatar sm" aria-hidden="true">
@@ -1283,6 +1645,7 @@ export default function KekeHome() {
           )}
 
           {error && <div className="keke-hint offline" role="alert">{error}</div>}
+          <TrackingChip tracking={tracking} now={now} />
 
           {headingTo ? (
             <button type="button" className="ko-accept" disabled={busy} onClick={completeTrip}>
@@ -1301,6 +1664,59 @@ export default function KekeHome() {
                 </button>
               )}
             </>
+          )}
+
+          {/* Incident controls (Task 1) on the full-screen trip views. */}
+          {(interruptibleTrip || preBoardTrip) && (
+            <div className="kr-incident">
+              <span className="kr-incident-label">
+                {interruptibleTrip
+                  ? 'Problem while the student is aboard?'
+                  : 'Cannot continue before pickup?'}
+              </span>
+              <div className="kr-incident-actions">
+                {interruptibleTrip && (
+                  <>
+                    <button
+                      type="button"
+                      className="kr-incident-btn warn"
+                      disabled={busy}
+                      onClick={() => reportIncident(activeTrip, 'interrupt', 'breakdown')}
+                    >
+                      Breakdown
+                    </button>
+                    <button
+                      type="button"
+                      className="kr-incident-btn danger"
+                      disabled={busy}
+                      onClick={() => reportIncident(activeTrip, 'interrupt', 'emergency')}
+                    >
+                      Emergency
+                    </button>
+                  </>
+                )}
+                {preBoardTrip && (
+                  <>
+                    <button
+                      type="button"
+                      className="kr-incident-btn warn"
+                      disabled={busy}
+                      onClick={() => reportIncident(activeTrip, 'redispatch', 'breakdown')}
+                    >
+                      Breakdown — release booking
+                    </button>
+                    <button
+                      type="button"
+                      className="kr-incident-btn"
+                      disabled={busy}
+                      onClick={() => reportIncident(activeTrip, 'redispatch', 'cancelled')}
+                    >
+                      Cancel booking
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
           )}
         </section>
       </main>
@@ -1330,12 +1746,40 @@ export default function KekeHome() {
               {unavailable
                 ? 'You are unavailable'
                 : atCapacity
-                  ? 'Your keke is full · 4/4'
+                  ? `Your keke is full · ${MAX_ACTIVE_RIDES}/${MAX_ACTIVE_RIDES}`
                   : onTrip
-                    ? `On a trip · ${activeTrips.length}/4`
+                    ? `On a trip · ${activeTrips.length}/${MAX_ACTIVE_RIDES}`
                     : `You are ${online ? 'online' : 'offline'}`}
             </h1>
           </div>
+
+          {/* Notification opt-in for new requests. Hidden when the browser
+              has no Notification API; honest about a blocked permission.
+              The offer modal itself never depends on this. */}
+          {notifPerm !== 'unsupported' && (
+            <button
+              type="button"
+              className={`keke-notif-bell ${notifPerm === 'granted' ? 'is-on' : ''}`}
+              aria-label={
+                notifPerm === 'granted'
+                  ? 'New-request notifications are on'
+                  : notifPerm === 'denied'
+                    ? 'Notifications blocked in browser settings'
+                    : 'Turn on new-request notifications'
+              }
+              title={
+                notifPerm === 'granted'
+                  ? 'New-request notifications on'
+                  : notifPerm === 'denied'
+                    ? 'Notifications blocked — allow them in your browser settings'
+                    : 'Notify me about new ride requests'
+              }
+              disabled={notifPerm === 'granted'}
+              onClick={askNotifications}
+            >
+              {notifPerm === 'granted' ? '🔔' : notifPerm === 'denied' ? '🔕' : '🔔?'}
+            </button>
+          )}
         </div>
 
         <section className="keke-earnings-today" aria-label="Today earnings">
@@ -1373,7 +1817,7 @@ export default function KekeHome() {
           <div className={`keke-hint ${online || onTrip ? '' : 'offline'}`}>
             <span>
               {onTrip
-                ? `You are carrying ${activeTrips.length} of 4 rides.`
+                ? `You are carrying ${activeTrips.length} of ${MAX_ACTIVE_RIDES} rides.`
                 : online
                   ? 'You are available for student ride requests.'
                   : unavailable
@@ -1382,7 +1826,7 @@ export default function KekeHome() {
             </span>
             <strong>
               {onTrip
-                ? 'New requests keep arriving until all 4 seats are taken.'
+                ? `New requests keep arriving until all ${MAX_ACTIVE_RIDES} seats are taken.`
                 : online
                   ? 'A request will appear here automatically.'
                   : 'The system will offer rides to eligible riders one at a time.'}
@@ -1432,8 +1876,8 @@ export default function KekeHome() {
             <div className="keke-hint">
               <strong>Waiting for your next offer</strong>
               <span>
-                Keep this page open — offers stop arriving when all 4 seats
-                are taken.
+                Keep this page open — offers stop arriving when all{' '}
+                {MAX_ACTIVE_RIDES} seats are taken.
               </span>
             </div>
           )}
@@ -1441,7 +1885,7 @@ export default function KekeHome() {
           {!availableForWork && (
             <p className="keke-data-note">
               {atCapacity
-                ? 'All 4 seats are in use. Finish a trip to receive new offers.'
+                ? `All ${MAX_ACTIVE_RIDES} seats are in use. Finish a trip to receive new offers.`
                 : unavailable
                   ? 'You are unavailable and will not receive new offers.'
                   : 'You are offline and will not receive new offers.'}

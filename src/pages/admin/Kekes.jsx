@@ -24,6 +24,7 @@ export default function AdminKekes() {
   const [stations, setStations] = useState([])
   const [busyId, setBusyId] = useState(null)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
 
   async function load() {
     const [{ data, error: readError }, { data: locs }] = await Promise.all([
@@ -42,6 +43,46 @@ export default function AdminKekes() {
   useEffect(() => {
     load()
   }, [])
+
+  // Full rider removal: keke row + rider profile + login + every ride,
+  // ticket and payment attached. RLS has no DELETE path for kekes and the
+  // ride children FK-block naive deletes — all of it is handled inside the
+  // admin-delete-user function (admins only, never mid-trip).
+  async function remove(row) {
+    const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles
+    const name = profile?.full_name ? `${row.keke_number} (${profile.full_name})` : row.keke_number
+    const confirmed = window.confirm(
+      `Delete ${name}? This permanently removes the rider account together with every ride, ticket and payment attached to it. This cannot be undone.`,
+    )
+    if (!confirmed) return
+
+    setBusyId(row.id)
+    setError('')
+    setNotice('')
+
+    const { data, error: fnError } = await supabase.functions.invoke('admin-delete-user', {
+      body: { user_id: row.id },
+    })
+
+    setBusyId(null)
+
+    if (fnError) {
+      let detail = fnError.message
+      try {
+        const payload = await fnError.context?.json?.()
+        detail = payload?.error || detail
+      } catch {}
+      setError(`Delete failed: ${detail}`)
+      return
+    }
+    if (data?.error) {
+      setError(`Delete failed: ${data.error}`)
+      return
+    }
+
+    setNotice(`Deleted ${name}.`)
+    load()
+  }
 
   async function setStatus(id, status) {
     setBusyId(id)
@@ -87,6 +128,7 @@ export default function AdminKekes() {
       </p>
 
       {error && <div className="error" role="alert">{error}</div>}
+      {notice && <div className="ok" role="status">{notice}</div>}
       {rows === null && !error && <p className="muted">Loading…</p>}
       {rows && rows.length === 0 && (
         <div className="adm-panel muted">No keke riders registered yet.</div>
@@ -162,6 +204,15 @@ export default function AdminKekes() {
                             Locked while on a trip.
                           </div>
                         )}
+                        <button
+                          type="button"
+                          className="adm-btn secondary"
+                          disabled={busyId === row.id || row.status === 'on_trip'}
+                          onClick={() => remove(row)}
+                          style={{ marginTop: 6 }}
+                        >
+                          {busyId === row.id ? 'Deleting…' : 'Delete'}
+                        </button>
                       </td>
                     </tr>
                   )

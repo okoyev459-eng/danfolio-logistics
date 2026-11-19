@@ -1,0 +1,1432 @@
+{
+  "type": "FeatureCollection",
+  "name": "Veritas campus building footprints",
+  "metadata": {
+    "coordinate_order": "[longitude, latitude]",
+    "crs": "WGS84 / EPSG:4326",
+    "attribution": "© OpenStreetMap contributors",
+    "source": "OpenStreetMap Overpass export; see docs/campus-map-digitization.md"
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "id": "osm-way-1300626034",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.4159315,
+              9.2878404
+            ],
+            [
+              7.4164671,
+              9.2876059
+            ],
+            [
+              7.416107,
+              9.2870105
+            ],
+            [
+              7.415691,
+              9.2874284
+            ],
+            [
+              7.4159315,
+              9.2878404
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1300626034,
+        "name": "Multipurpose Hall",
+        "building": "yes",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "addr:city": "bwari",
+          "addr:postcode": "901101",
+          "addr:street": "Veritas University Multi-Purpose Hall (MPH)",
+          "building": "yes",
+          "name": "Multipurpose Hall"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1408401878",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.4174713,
+              9.2871782
+            ],
+            [
+              7.4169763,
+              9.2870787
+            ],
+            [
+              7.4172233,
+              9.2867261
+            ],
+            [
+              7.417589,
+              9.2868381
+            ],
+            [
+              7.4175806,
+              9.2868796
+            ],
+            [
+              7.4174713,
+              9.2871782
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1408401878,
+        "name": "Auditorium",
+        "building": "yes",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "building": "yes",
+          "name": "Auditorium"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746232",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.4158849,
+              9.2895381
+            ],
+            [
+              7.4161107,
+              9.2894001
+            ],
+            [
+              7.4159804,
+              9.2891512
+            ],
+            [
+              7.4157464,
+              9.2893
+            ],
+            [
+              7.4157733,
+              9.2893555
+            ],
+            [
+              7.4158849,
+              9.2895381
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746232,
+        "name": "block A",
+        "building": "yes",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "building": "yes",
+          "name": "block A"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746233",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.4156844,
+              9.2892074
+            ],
+            [
+              7.4159209,
+              9.2890696
+            ],
+            [
+              7.4158809,
+              9.2889942
+            ],
+            [
+              7.4158419,
+              9.2888673
+            ],
+            [
+              7.4158169,
+              9.288884
+            ],
+            [
+              7.4157762,
+              9.2888143
+            ],
+            [
+              7.4155505,
+              9.2889416
+            ],
+            [
+              7.4155945,
+              9.2890286
+            ],
+            [
+              7.4155812,
+              9.2890507
+            ],
+            [
+              7.4156152,
+              9.2891231
+            ],
+            [
+              7.4156399,
+              9.2891134
+            ],
+            [
+              7.4156844,
+              9.2892074
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746233,
+        "name": "",
+        "building": "block_b",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "area": "yes",
+          "building": "block_b"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746236",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.4143426,
+              9.2872348
+            ],
+            [
+              7.4144896,
+              9.2870918
+            ],
+            [
+              7.414291,
+              9.2869037
+            ],
+            [
+              7.4141527,
+              9.2870297
+            ],
+            [
+              7.4142162,
+              9.2870929
+            ],
+            [
+              7.4143426,
+              9.2872348
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746236,
+        "name": "1,2&3 cafe",
+        "building": "yes",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "amenity": "cafe",
+          "building": "yes",
+          "name": "1,2&3 cafe"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746237",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.4136995,
+              9.2867607
+            ],
+            [
+              7.4135485,
+              9.2867036
+            ],
+            [
+              7.4135891,
+              9.2865988
+            ],
+            [
+              7.4137399,
+              9.2866617
+            ],
+            [
+              7.4136995,
+              9.2867607
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746237,
+        "name": "gg`s",
+        "building": "yes",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "amenity": "cafe",
+          "building": "yes",
+          "name": "gg`s"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746238",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.412958,
+              9.2866394
+            ],
+            [
+              7.4129202,
+              9.2864327
+            ],
+            [
+              7.4132143,
+              9.2863842
+            ],
+            [
+              7.4132382,
+              9.2865878
+            ],
+            [
+              7.412958,
+              9.2866394
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746238,
+        "name": "hostel a",
+        "building": "yes",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "building": "yes",
+          "name": "hostel a",
+          "tourism": "hostel"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746239",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.4131916,
+              9.2863166
+            ],
+            [
+              7.4129019,
+              9.2863786
+            ],
+            [
+              7.4128685,
+              9.2861646
+            ],
+            [
+              7.4131524,
+              9.2861122
+            ],
+            [
+              7.4131916,
+              9.2863166
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746239,
+        "name": "hostel b",
+        "building": "yes",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "building": "yes",
+          "name": "hostel b",
+          "tourism": "hostel"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746240",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.412499,
+              9.2857284
+            ],
+            [
+              7.4124737,
+              9.2854908
+            ],
+            [
+              7.4121637,
+              9.2855464
+            ],
+            [
+              7.4121988,
+              9.285762
+            ],
+            [
+              7.41232,
+              9.2857476
+            ],
+            [
+              7.412499,
+              9.2857284
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746240,
+        "name": "hostel p",
+        "building": "yes",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "building": "yes",
+          "name": "hostel p",
+          "tourism": "hostel"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746241",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.4124377,
+              9.2854666
+            ],
+            [
+              7.412214,
+              9.2855147
+            ],
+            [
+              7.4121587,
+              9.2852027
+            ],
+            [
+              7.4123831,
+              9.285148
+            ],
+            [
+              7.4124377,
+              9.2854666
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746241,
+        "name": "hostel O",
+        "building": "yes",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "building": "yes",
+          "name": "hostel O",
+          "tourism": "hostel"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746242",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.4121316,
+              9.2851169
+            ],
+            [
+              7.4123451,
+              9.2851101
+            ],
+            [
+              7.4124001,
+              9.2849159
+            ],
+            [
+              7.412338,
+              9.2847436
+            ],
+            [
+              7.4121416,
+              9.284733
+            ],
+            [
+              7.4121357,
+              9.2847738
+            ],
+            [
+              7.4121316,
+              9.2851169
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746242,
+        "name": "hostel f",
+        "building": "yes",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "building": "yes",
+          "name": "hostel f",
+          "tourism": "hostel"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746243",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.412161,
+              9.2846882
+            ],
+            [
+              7.412337,
+              9.2846745
+            ],
+            [
+              7.4123956,
+              9.2845023
+            ],
+            [
+              7.4123555,
+              9.28433
+            ],
+            [
+              7.4121767,
+              9.2843215
+            ],
+            [
+              7.412161,
+              9.2846882
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746243,
+        "name": "hostel E",
+        "building": "yes",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "building": "yes",
+          "name": "hostel E",
+          "tourism": "hostel"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746244",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.4126134,
+              9.2845484
+            ],
+            [
+              7.4126837,
+              9.2845564
+            ],
+            [
+              7.4126888,
+              9.2843684
+            ],
+            [
+              7.4126162,
+              9.2843879
+            ],
+            [
+              7.4126134,
+              9.2845484
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746244,
+        "name": "down cafe",
+        "building": "yes",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "amenity": "cafe",
+          "building": "yes",
+          "name": "down cafe"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746245",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.4127604,
+              9.2852211
+            ],
+            [
+              7.4129469,
+              9.2852125
+            ],
+            [
+              7.4129761,
+              9.2848328
+            ],
+            [
+              7.4128401,
+              9.2848215
+            ],
+            [
+              7.4127633,
+              9.2848696
+            ],
+            [
+              7.4127397,
+              9.2850321
+            ],
+            [
+              7.4127604,
+              9.2852211
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746245,
+        "name": "hostel d",
+        "building": "yes",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "building": "yes",
+          "name": "hostel d",
+          "tourism": "hostel"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746246",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.4130668,
+              9.2852312
+            ],
+            [
+              7.4132423,
+              9.2852074
+            ],
+            [
+              7.4133326,
+              9.2850156
+            ],
+            [
+              7.4132532,
+              9.2848411
+            ],
+            [
+              7.4130484,
+              9.2848475
+            ],
+            [
+              7.4130668,
+              9.2852312
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746246,
+        "name": "hostel c",
+        "building": "yes",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "building": "yes",
+          "name": "hostel c",
+          "tourism": "hostel"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746248",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.4120106,
+              9.2866289
+            ],
+            [
+              7.4123109,
+              9.2865699
+            ],
+            [
+              7.4122983,
+              9.286183
+            ],
+            [
+              7.4120052,
+              9.2862397
+            ],
+            [
+              7.4120106,
+              9.2866289
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746248,
+        "name": "hostel  H",
+        "building": "yes",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "building": "yes",
+          "name": "hostel  H",
+          "tourism": "hostel"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746249",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.4116446,
+              9.2865939
+            ],
+            [
+              7.4116611,
+              9.2862567
+            ],
+            [
+              7.4115859,
+              9.2862469
+            ],
+            [
+              7.4115144,
+              9.2858419
+            ],
+            [
+              7.4113424,
+              9.2858614
+            ],
+            [
+              7.4113701,
+              9.2860421
+            ],
+            [
+              7.4111728,
+              9.2860939
+            ],
+            [
+              7.4112171,
+              9.286284
+            ],
+            [
+              7.4110077,
+              9.2863214
+            ],
+            [
+              7.4110893,
+              9.2866865
+            ],
+            [
+              7.4116446,
+              9.2865939
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746249,
+        "name": "hostel l&k",
+        "building": "yes",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "building": "yes",
+          "name": "hostel l&k",
+          "tourism": "hostel"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746250",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.4119063,
+              9.2858154
+            ],
+            [
+              7.4121342,
+              9.2857777
+            ],
+            [
+              7.4120994,
+              9.2855549
+            ],
+            [
+              7.4118902,
+              9.2855973
+            ],
+            [
+              7.4119063,
+              9.2858154
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746250,
+        "name": "hostel Q",
+        "building": "yes",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "building": "yes",
+          "name": "hostel Q",
+          "tourism": "hostel"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746251",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.4116873,
+              9.286864
+            ],
+            [
+              7.4114142,
+              9.2869294
+            ],
+            [
+              7.4113605,
+              9.2867416
+            ],
+            [
+              7.411659,
+              9.2866533
+            ],
+            [
+              7.411642,
+              9.2866844
+            ],
+            [
+              7.4116956,
+              9.2867712
+            ],
+            [
+              7.4116873,
+              9.286864
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746251,
+        "name": "hostel j",
+        "building": "yes",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "building": "yes",
+          "name": "hostel j",
+          "tourism": "hostel"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746252",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.4112926,
+              9.2869367
+            ],
+            [
+              7.4112243,
+              9.2867523
+            ],
+            [
+              7.4109634,
+              9.2868298
+            ],
+            [
+              7.4110307,
+              9.2870356
+            ],
+            [
+              7.4112926,
+              9.2869367
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746252,
+        "name": "hostel i",
+        "building": "yes",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "building": "yes",
+          "name": "hostel i",
+          "tourism": "hostel"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746253",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.4105596,
+              9.2862451
+            ],
+            [
+              7.4102025,
+              9.2866372
+            ],
+            [
+              7.4104526,
+              9.2869472
+            ],
+            [
+              7.4105985,
+              9.2868184
+            ],
+            [
+              7.4105082,
+              9.2866145
+            ],
+            [
+              7.4107336,
+              9.2863525
+            ],
+            [
+              7.4105596,
+              9.2862451
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746253,
+        "name": "hostel m",
+        "building": "yes",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "building": "yes",
+          "name": "hostel m",
+          "tourism": "hostel"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746254",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.4101206,
+              9.2871811
+            ],
+            [
+              7.4102132,
+              9.2871126
+            ],
+            [
+              7.4101209,
+              9.2869167
+            ],
+            [
+              7.4101753,
+              9.2868656
+            ],
+            [
+              7.4103192,
+              9.2870453
+            ],
+            [
+              7.4104258,
+              9.2869837
+            ],
+            [
+              7.4101763,
+              9.2866754
+            ],
+            [
+              7.4099175,
+              9.286848
+            ],
+            [
+              7.4101206,
+              9.2871811
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746254,
+        "name": "hostel N",
+        "building": "yes",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "building": "yes",
+          "name": "hostel N",
+          "tourism": "hostel"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746258",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.4191178,
+              9.2898418
+            ],
+            [
+              7.4195163,
+              9.289849
+            ],
+            [
+              7.4195118,
+              9.2892961
+            ],
+            [
+              7.419094,
+              9.2892561
+            ],
+            [
+              7.4191178,
+              9.2898418
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746258,
+        "name": "law building",
+        "building": "yes",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "building": "yes",
+          "name": "law building"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746259",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.4151677,
+              9.2868969
+            ],
+            [
+              7.4154029,
+              9.2871429
+            ],
+            [
+              7.4156141,
+              9.2869149
+            ],
+            [
+              7.4153953,
+              9.286692
+            ],
+            [
+              7.4151677,
+              9.2868969
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746259,
+        "name": "Engineering Workshop",
+        "building": "engineering work shop",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "area": "yes",
+          "building": "engineering work shop",
+          "name": "Engineering Workshop"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746260",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.4170599,
+              9.287772
+            ],
+            [
+              7.4173905,
+              9.2878593
+            ],
+            [
+              7.4175288,
+              9.2873889
+            ],
+            [
+              7.417151,
+              9.2872401
+            ],
+            [
+              7.4168061,
+              9.2875779
+            ],
+            [
+              7.4170599,
+              9.287772
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746260,
+        "name": "software building",
+        "building": "yes",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "building": "yes",
+          "name": "software building"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746261",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.4183394,
+              9.285731
+            ],
+            [
+              7.418951,
+              9.285638
+            ],
+            [
+              7.4189377,
+              9.2853214
+            ],
+            [
+              7.4183138,
+              9.2853964
+            ],
+            [
+              7.4183394,
+              9.285731
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746261,
+        "name": "Senate Building",
+        "building": "senate building",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "area": "yes",
+          "building": "senate building",
+          "name": "Senate Building"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746262",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.415704,
+              9.2851155
+            ],
+            [
+              7.4161437,
+              9.2850853
+            ],
+            [
+              7.4160884,
+              9.2845868
+            ],
+            [
+              7.4157465,
+              9.2846082
+            ],
+            [
+              7.415704,
+              9.2851155
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746262,
+        "name": "medical building",
+        "building": "yes",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "building": "yes",
+          "name": "medical building"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746263",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.4171142,
+              9.2851889
+            ],
+            [
+              7.4176468,
+              9.2851305
+            ],
+            [
+              7.4175807,
+              9.2846719
+            ],
+            [
+              7.4170492,
+              9.2847131
+            ],
+            [
+              7.4171189,
+              9.2849525
+            ],
+            [
+              7.4171142,
+              9.2851889
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746263,
+        "name": "pharmacy building",
+        "building": "yes",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "building": "yes",
+          "name": "pharmacy building"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746264",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.4156605,
+              9.2857504
+            ],
+            [
+              7.4160397,
+              9.2857389
+            ],
+            [
+              7.4160747,
+              9.285584
+            ],
+            [
+              7.4159938,
+              9.2854325
+            ],
+            [
+              7.4156645,
+              9.2854893
+            ],
+            [
+              7.4156605,
+              9.2857504
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746264,
+        "name": "nursing  building",
+        "building": "yes",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "building": "yes",
+          "name": "nursing  building"
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "osm-way-1576746267",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.4166681,
+              9.2827566
+            ],
+            [
+              7.4173189,
+              9.2826361
+            ],
+            [
+              7.4173018,
+              9.2823925
+            ],
+            [
+              7.4166361,
+              9.2825057
+            ],
+            [
+              7.4166681,
+              9.2827566
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "osm_id": 1576746267,
+        "name": "old kelson",
+        "building": "yes",
+        "levels": "",
+        "source": "OpenStreetMap",
+        "raw_tags": {
+          "building": "yes",
+          "name": "old kelson",
+          "tourism": "hostel"
+        }
+      }
+    }
+  ]
+}

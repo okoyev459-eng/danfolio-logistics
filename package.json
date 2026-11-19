@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:https": "sh scripts/gen-dev-cert.sh && DANFOLIO_HTTPS=1 vite",
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run"

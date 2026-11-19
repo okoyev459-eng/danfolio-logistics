@@ -140,7 +140,25 @@ Deno.serve(async (req) => {
       .select('id, fare, status')
       .single()
 
-    if (rideError) throw rideError
+    if (rideError) {
+      // Partial unique index rides_one_active_per_student: two bookings for
+      // the same student can never both land, even when they race.
+      if (rideError.code === '23505') {
+        const { data: activeRide } = await adminClient
+          .from('rides')
+          .select('id')
+          .eq('student_id', user.id)
+          .in('status', ['searching', 'accepted', 'paid', 'arrived', 'on_trip'])
+          .limit(1)
+          .maybeSingle()
+
+        return respond({
+          error: 'You already have an active ride.',
+          ride_id: activeRide?.id ?? null,
+        }, 409)
+      }
+      throw rideError
+    }
 
     const { data: dispatch, error: dispatchError } = await adminClient.rpc(
       'dispatch_next_ride_request',

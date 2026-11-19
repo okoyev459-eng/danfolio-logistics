@@ -461,29 +461,50 @@ enabled = true
 verify_jwt = true
 entrypoint = "./functions/admin-refund/index.ts"
 
+[functions.rider-cancel-ride]
+enabled = true
+# Rider-signed JWT re-validated server-side. The assigned keke (or an admin)
+# reports a pre-boarding cancellation/breakdown (re-dispatch, payment
+# preserved) or a post-boarding interruption (recorded, never auto-refunded);
+# admins arrange the replacement via action 'resume'.
+verify_jwt = true
+entrypoint = "./functions/rider-cancel-ride/index.ts"
+
 [functions.match-tick]
 enabled = true
 # Server-to-server maintenance tick. The caller must send
-# `Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>` (the same pattern
-# refund-ride uses); the function re-checks it against its own env value.
-# The service-role key is itself a valid JWT, so gateway verification stays ON.
-verify_jwt = true
+# `Authorization: Bearer <MATCH_TICK_SECRET>` — a dedicated random token set
+# via `supabase secrets set` (function environment) and mirrored in Vault for
+# the cron job SQL. Because that token is not a project JWT, gateway JWT
+# verification is OFF (same pattern as create-ride); the function itself
+# rejects anything that is not an exact match with 401 before doing any work.
+verify_jwt = false
 entrypoint = "./functions/match-tick/index.ts"
 # NOTE: Edge Functions have NO native scheduler (CLI v2.122.0 has no
 # --schedule flag; the Management API has no schedule endpoint). The sanctioned
-# scheduler is Supabase Cron (pg_cron + pg_net) with the service key in Vault,
-# configured AFTER deploy:
-#   1. Dashboard -> Integrations -> Cron -> enable pg_cron (and enable pg_net)
-#   2. select vault.create_secret('<SERVICE_ROLE_KEY>',
-#        'match-tick-service-role', 'match-tick cron job key');
-#   3. select cron.schedule('match-tick', '15 seconds',
+# scheduler is Supabase Cron (pg_cron + pg_net) with a DEDICATED secret in the
+# function env AND Vault (never the service-role key, never in this file):
+#   1. CREATE EXTENSION pg_cron / pg_net (already applied on this project)
+#   2. npx supabase secrets set MATCH_TICK_SECRET='<random value>'
+#   3. select vault.create_secret('<same value>',
+#        'match-tick-secret', 'match-tick cron job token');
+#   4. select cron.schedule('match-tick', '15 seconds',
 #        $$ select net.http_post(
 #             url := 'https://<PROJECT_REF>.supabase.co/functions/v1/match-tick',
 #             headers := jsonb_build_object(
 #               'Content-Type', 'application/json',
 #               'Authorization', 'Bearer ' || (select decrypted_secret
-#                 from vault.decrypted_secrets where name = 'match-tick-service-role')),
+#                 from vault.decrypted_secrets where name = 'match-tick-secret')),
 #             body := '{}'::jsonb,
 #             timeout_milliseconds := 10000) $$);
 # Sub-minute schedules need PostgreSQL >= 15.1.1.61 (this project: 17.11).
-# Do NOT put the real service-role key in this file — it lives in Vault only.
+# Do NOT put any real secret in this file — it lives in the function env and
+# Vault only.
+
+[functions.admin-delete-user]
+enabled = true
+# Admin-signed JWT re-validated server-side (profiles.role must be 'admin');
+# the function then removes the whole account — login, profile, keke row and
+# every ride/ticket/payment attached — in a retry-safe order.
+verify_jwt = true
+entrypoint = "./functions/admin-delete-user/index.ts"

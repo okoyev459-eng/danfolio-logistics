@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Layout from '../../components/Layout.jsx'
 import { supabase } from '../../lib/supabase'
+// ONE source of truth with the server's start-payment charge — the fee the
+// student sees here is exactly the fee Paystack charges (no drift).
+import { SERVICE_FEE_NGN, rideTotal } from '../../../supabase/functions/_shared/policy.js'
 import './PayRide.css'
 
 // Slide-to-pay (mockup screen 7): dragging the knob past the threshold
@@ -306,6 +309,9 @@ export default function PayRide({ rideId, onBack }) {
   }
 
   const fare = Number(ride?.fare)
+  // Exactly what start-payment will charge: agreed fare + the fixed ₦20
+  // service fee, in one Paystack charge. The rider still receives the fare.
+  const total = Number.isFinite(fare) && fare > 0 ? rideTotal(fare, SERVICE_FEE_NGN) : null
 
   return (
     <Layout title="Ride payment">
@@ -332,10 +338,26 @@ export default function PayRide({ rideId, onBack }) {
             <div className="fare">
               <span>Ride fare</span>
               <b>₦{Number.isFinite(fare) ? fare.toLocaleString('en-NG') : '—'}</b>
+            </div>
+
+            <div className="fare">
+              <span>Service fee</span>
+              <b>₦{SERVICE_FEE_NGN.toLocaleString('en-NG')}</b>
+            </div>
+
+            <div className="fare">
+              <span>Total to pay</span>
+              <b>₦{total !== null ? total.toLocaleString('en-NG') : '—'}</b>
               <span className="badge">
                 {ride.status.replaceAll('_', ' ')}
               </span>
             </div>
+
+            <p className="muted" style={{ fontSize: 13 }}>
+              Your Keke receives the full ride fare; the service fee is
+              Danfolio’s platform charge and is included in this single
+              payment.
+            </p>
 
             {ride.status === 'accepted' && !watching && (
               <>
@@ -404,7 +426,7 @@ export default function PayRide({ rideId, onBack }) {
             <h2>{ticket.ticket_no}</h2>
             <span className="badge">{ticket.status}</span>
             <p>Keep this ticket as proof of payment for your ride.</p>
-            <Link to={`/student/ticket/${rideId}`}>
+            <Link className="btn secondary" to={`/student/ticket/${rideId}`}>
               Open ticket
             </Link>
           </div>

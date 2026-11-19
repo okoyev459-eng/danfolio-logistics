@@ -1,0 +1,11 @@
+# Same exclusions as .gitignore — critically, never upload .env.local
+# (it holds SUPABASE_DB_PASSWORD) or the self-signed dev certificate.
+node_modules
+dist
+.env
+.env.*
+!.env.example
+.cert
+.DS_Store
+.vercel
+offline transfar

@@ -1,4 +1,22 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { isCashMethod } from '../_shared/policy.js'
+
+// refund-ride — server-to-server refund of a VERIFIED payment.
+//
+// Guard rails (Task 1):
+//   * only a payment with status 'success' can ever be refunded, and only
+//     through Paystack when the method is digital (card/transfer). A CASH
+//     payment never reached Paystack — it returns 409 so no system or
+//     student path can silently "refund" money that was never charged;
+//   * ride statuses: paid / arrived always; searching / accepted / cancelled
+//     / refunded when a successful payment exists (a paid booking that was
+//     re-dispatched back to 'searching', then closed with no keke);
+//   * on_trip ONLY when the trip is recorded as interrupted
+//     (interrupted_at IS NOT NULL) — that is an admin-decided refund of a
+//     breakdown, never an automatic one;
+//   * completed is never automatically refundable;
+//   * retry-safe: an already-refunded pair reports success without calling
+//     Paystack again (no duplicate refunds).
 
 const corsHeaders = {
   'Access-Control-Allow-Headers':
@@ -62,7 +80,7 @@ Deno.serve(async (req) => {
 
     const { data: ride, error: rideError } = await admin
       .from('rides')
-      .select('id, keke_id, status')
+      .select('id, keke_id, status, interrupted_at')
       .eq('id', rideId)
       .maybeSingle()
 
@@ -71,13 +89,24 @@ Deno.serve(async (req) => {
 
     const { data: payment, error: paymentError } = await admin
       .from('payments')
-      .select('id, paystack_ref, amount, status')
+      .select('id, paystack_ref, amount, status, method')
       .eq('ride_id', rideId)
       .maybeSingle()
 
     if (paymentError) throw paymentError
     if (!payment) {
       return respond({ error: 'No payment record exists for this ride.' }, 404)
+    }
+
+    async function auditEvent(event: string, metadata: Record<string, unknown>) {
+      const { error } = await admin.from('ride_events').insert({
+        ride_id: rideId,
+        actor_role: 'system',
+        event,
+        from_status: ride.status,
+        metadata,
+      })
+      if (error) console.error('refund-ride: could not record event:', error)
     }
 
     if (ride.status === 'refunded' && payment.status === 'refunded') {
@@ -97,15 +126,51 @@ Deno.serve(async (req) => {
       })
     }
 
-    if (!['paid', 'arrived', 'refunded'].includes(ride.status)) {
+    // Which ride statuses may be refunded, given this payment actually
+    // moved money. 'completed' is deliberately absent: a finished trip is
+    // settled, and 'on_trip' is only reachable when an interruption was
+    // recorded (admin-decided, never automatic).
+    const refundableStatuses = ['paid', 'arrived', 'searching', 'accepted', 'cancelled', 'refunded']
+    if (ride.status === 'on_trip') {
+      if (!ride.interrupted_at) {
+        return respond({
+          error:
+            'This trip is still in progress and was not interrupted. A ' +
+            'refund can only follow a recorded interruption (breakdown) ' +
+            'and an admin decision.',
+        }, 409)
+      }
+      // Interrupted trip: allowed, but it stays an explicit act — the ride
+      // status is NOT moved off 'on_trip' here (the passenger may still be
+      // aboard and tracked); only the payment is refunded.
+    } else if (!refundableStatuses.includes(ride.status)) {
       return respond({
-        error: 'Only paid or arrived rides can be refunded.',
+        error: `This ride (status "${ride.status}") cannot be refunded.`,
       }, 409)
     }
 
     if (!['success', 'refunded'].includes(payment.status)) {
       return respond({
         error: 'Only successfully paid rides can be refunded.',
+      }, 409)
+    }
+
+    // A cash payment never reached Paystack. Refunding it is a manual /
+    // admin reconciliation — never an automatic call to the provider.
+    // (Only an explicit 'cash' method is blocked; legacy NULL rows were all
+    // Paystack charges and stay refundable.)
+    if (payment.status === 'success' && isCashMethod(payment.method)) {
+      await auditEvent('refund_blocked_cash', {
+        payment_id: payment.id,
+        payment_method: payment.method ?? 'unknown',
+        detail: 'cash payments are not sent to Paystack',
+      })
+      return respond({
+        error:
+          'This payment was collected as cash, so it cannot be refunded ' +
+          'through Paystack. Arrange the cash refund manually and record ' +
+          'it in the payment history.',
+        payment_method: payment.method ?? 'unknown',
       }, 409)
     }
 
@@ -171,12 +236,13 @@ Deno.serve(async (req) => {
       }
     }
 
-    if (ride.status !== 'refunded') {
+    if (ride.status !== 'refunded' && ride.status !== 'on_trip') {
+      // Same guarded set the eligibility check allowed above.
       const { data: updatedRide, error: updateRideError } = await admin
         .from('rides')
         .update({ status: 'refunded' })
         .eq('id', rideId)
-        .in('status', ['paid', 'arrived'])
+        .in('status', ['paid', 'arrived', 'searching', 'accepted', 'cancelled'])
         .select('id')
         .maybeSingle()
 
@@ -189,10 +255,20 @@ Deno.serve(async (req) => {
         }, 409)
       }
     }
+    // An interrupted on_trip ride keeps its status: the passenger may still
+    // be aboard with live tracking (and possibly a replacement keke), so the
+    // trip must not disappear into 'refunded' underneath them.
 
-    if (ride.keke_id) {
+    await auditEvent('payment_refunded', {
+      payment_id: payment.id,
+      method: payment.method ?? 'unknown',
+      amount: payment.amount,
+      ride_status_after: ride.status === 'on_trip' ? 'on_trip (unchanged)' : 'refunded',
+    })
+
+    if (ride.keke_id && ride.status !== 'on_trip') {
       // Only returns the rider to 'online' when this refund ended their last
-      // active ride — a keke holds up to 4 passengers at once.
+      // active ride — a keke holds up to 3 passengers at once.
       const { error: releaseError } = await admin.rpc('release_keke_if_idle', {
         p_keke_id: ride.keke_id,
       })

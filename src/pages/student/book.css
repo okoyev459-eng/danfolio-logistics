@@ -374,6 +374,12 @@
   font-weight: 600;
   margin: 8px 0 0;
 }
+/* No live fix: honest grey state instead of a green "live" claim. */
+.bk-proximity.off {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #475569;
+}
 .bk-live {
   width: 9px;
   height: 9px;
@@ -381,6 +387,10 @@
   background: #10b981;
   flex: 0 0 auto;
   animation: bk-blink 1.6s ease-in-out infinite;
+}
+.bk-live.dim {
+  background: #94a3b8;
+  animation: none;
 }
 @keyframes bk-blink {
   0%, 100% { opacity: 1; transform: scale(1); }
@@ -424,6 +434,10 @@
 }
 .bk-fare small { display: block; font-size: 12px; opacity: 0.75; font-weight: 400; }
 
+/* Fee breakdown under the fixed fare (₦20 service fee + total). */
+.bk-fee-note { font-size: 13px; opacity: 0.85; margin: -4px 0 12px; }
+.bk-fee-note strong { color: #1e3a8a; }
+
 /* Trip progress bars live in index.css (.bk-progress) so every screen
    (booking flow, live ride, rider trip) shares them. */
 
@@ -462,6 +476,29 @@
 /* Primary action button inside the sheet (overrides the global full-width btn) */
 .bk-cta { margin-top: 10px; }
 .bk-cta:last-child { margin-bottom: 6px; }
+
+/* "You already have an active ride" notice (spec §1) — sky-blue card with
+   the prominent Return to Active Ride button. */
+.bk-already {
+  background: var(--sky);
+  border: 1px solid #bfdbfe;
+  border-radius: 16px;
+  padding: 14px;
+  margin: 0 0 12px;
+  text-align: center;
+}
+.bk-already b {
+  display: block;
+  font-family: Poppins, Inter, system-ui, sans-serif;
+  font-size: 15px;
+  color: var(--navy);
+}
+.bk-already p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #475569;
+}
 
 /* Keke/rider chip inside ride status cards */
 .bk-rider {

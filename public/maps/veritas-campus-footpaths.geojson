@@ -1,0 +1,11 @@
+{
+  "type": "FeatureCollection",
+  "name": "Veritas campus pedestrian paths",
+  "metadata": {
+    "coordinate_order": "[longitude, latitude]",
+    "crs": "WGS84 / EPSG:4326",
+    "attribution": "© OpenStreetMap contributors",
+    "source": "OpenStreetMap Overpass export; see docs/campus-map-digitization.md"
+  },
+  "features": []
+}

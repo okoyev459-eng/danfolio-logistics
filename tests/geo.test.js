@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   validCoord,
   distanceMeters,
@@ -6,6 +6,7 @@ import {
   circlePolygon,
   nearestSnap,
 } from '../src/lib/geo'
+import { insecureContext } from '../src/lib/useGeolocation'
 
 // The map renders a marker only for usable coordinates. Live data currently
 // stores NULL coordinates everywhere, and 0,0 is the classic "unknown" trap
@@ -101,5 +102,34 @@ describe('nearestSnap (bottom sheet)', () => {
   it('handles a single snap and empty input', () => {
     expect(nearestSnap(10, [0])).toBe(0)
     expect(nearestSnap(10, [])).toBe(0)
+  })
+})
+
+// The phone loads the app over plain http://<lan-ip> — NOT a secure context,
+// so browsers refuse the Geolocation API without ever prompting. The UI must
+// report THAT (open over HTTPS), never the false "allow location" message the
+// laptop (localhost is exempt) can never reproduce.
+describe('insecureContext', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('is false with no window (node/test env) — never blocks by default', () => {
+    expect(insecureContext()).toBe(false)
+  })
+
+  it('is true on a plain-http origin (the phone)', () => {
+    vi.stubGlobal('window', { isSecureContext: false })
+    expect(insecureContext()).toBe(true)
+  })
+
+  it('is false on https / localhost (secure)', () => {
+    vi.stubGlobal('window', { isSecureContext: true })
+    expect(insecureContext()).toBe(false)
+  })
+
+  it('is false when the browser does not report it — benefit of the doubt', () => {
+    vi.stubGlobal('window', {})
+    expect(insecureContext()).toBe(false)
   })
 })

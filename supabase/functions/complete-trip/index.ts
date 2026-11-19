@@ -26,7 +26,7 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-// A keke carries up to 4 passengers, so finishing one trip only returns the
+// A keke carries up to 3 passengers, so finishing one trip only returns the
 // rider to 'online' when it was their LAST active ride — otherwise a rider
 // mid-way through three other bookings would be flipped out of 'on_trip'
 // while still carrying passengers. release_keke_if_idle() decides that

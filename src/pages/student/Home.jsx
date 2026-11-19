@@ -3,7 +3,9 @@ import { Link, useNavigate } from 'react-router-dom'
 import CampusMap from '../../components/CampusMap.jsx'
 import { useAuth } from '../../lib/auth.jsx'
 import { supabase } from '../../lib/supabase'
+import { useGeolocation } from '../../lib/useGeolocation'
 import { validCoord } from '../../lib/geo'
+import { useArrivalNotice } from '../../lib/notify'
 import './home.css'
 
 // Student home — mockup artboard "2 Home": the campus map IS the screen.
@@ -28,12 +30,18 @@ const TABS = ['Home', 'Rides', 'Profile']
 export default function StudentHome() {
   const { session, signOut } = useAuth()
   const navigate = useNavigate()
+  // Real device GPS for the blue dot (spec §3). Permission states are
+  // honest: denied / unavailable show a hint instead of a fake position.
+  const geo = useGeolocation()
 
   const [tab, setTab] = useState('Home')
   const [profile, setProfile] = useState(null)
   const [rides, setRides] = useState(null)
   const [reports, setReports] = useState([])
   const [activeRide, setActiveRide] = useState(null)
+  // Mirror of `rides` for the realtime handler below (callbacks may not use
+  // state updaters for side effects like recomputing activeRide).
+  const ridesRef = useRef([])
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [points, setPoints] = useState([])
@@ -63,6 +71,7 @@ export default function StudentHome() {
       .then(({ data }) => {
         if (!active) return
         const rows = data ?? []
+        ridesRef.current = rows
         setRides(rows)
         setActiveRide(rows.find((r) => ACTIVE_STATUSES.includes(r.status)) ?? null)
       })
@@ -75,6 +84,35 @@ export default function StudentHome() {
       .then(({ data }) => { if (active && data) setReports(data ?? []) })
 
     return () => { active = false }
+  }, [session])
+
+  // Live status of THIS student's rides (realtime). The load above runs once
+  // per session, so without this the active-ride pill AND the arrival notice
+  // would be frozen at whatever the status was when Home mounted. RLS
+  // delivers only this student's own ride rows (student_id filter is also
+  // enforced server-side by Realtime's RLS check).
+  useEffect(() => {
+    if (!session) return
+
+    const channel = supabase
+      .channel(`home-my-rides-${session.user.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'rides', filter: `student_id=eq.${session.user.id}` },
+        (payload) => {
+          const row = payload.new
+          if (!row?.id) return
+          const current = ridesRef.current
+          if (!current.some((r) => r.id === row.id)) return // not in our page of 20
+          const merged = current.map((r) => (r.id === row.id ? { ...r, ...row } : r))
+          ridesRef.current = merged
+          setRides(merged)
+          setActiveRide(merged.find((r) => ACTIVE_STATUSES.includes(r.status)) ?? null)
+        },
+      )
+      .subscribe()
+
+    return () => supabase.removeChannel(channel)
   }, [session])
 
   // ------------------------------------------------------------------
@@ -222,6 +260,11 @@ export default function StudentHome() {
     )
   }, [kekes])
 
+  // Every keke WITH coordinates goes on the map; CampusMap colours each
+  // badge by its real heartbeat (live / updating slowly / offline), so a
+  // stale fix is never shown as live and nothing is invented.
+  const mapKekes = useMemo(() => kekes.filter((k) => validCoord(k)), [kekes])
+
   const mapPoints = useMemo(
     () => points.filter((p) => validCoord(p)),
     [points],
@@ -230,6 +273,11 @@ export default function StudentHome() {
   function bookTo(destination) {
     navigate('/student/book', { state: destination ? { presetTo: destination } : undefined })
   }
+
+  // If the rider arrives while the student is on the home screen (not the
+  // ride page), tell them here — one notice per ride, never twice: the ride
+  // page's own hook keys on the same ride id, and only one page is mounted.
+  useArrivalNotice(activeRide)
 
   // ------------------------------------------------------------------
   // Render
@@ -256,28 +304,37 @@ export default function StudentHome() {
           <CampusMap
             key={mapAttempt}
             points={mapPoints}
-            kekes={liveKekes}
+            kekes={mapKekes}
             height="100%"
             animate
+            userLocation={geo.position}
+            userAccuracy={geo.accuracy}
             onSelect={(point) => {
               if (point.kind === 'destination') bookTo(point.name)
             }}
             onFail={() => setMapFailed(true)}
           />
         )}
+
+        {/* Honest GPS state — never a fabricated dot when permission is
+            denied, the fix is unavailable, or the page is not a secure
+            context (plain http:// — browsers refuse location outright). */}
+        {(geo.state === 'denied' ||
+          geo.state === 'insecure' ||
+          geo.state === 'unavailable' ||
+          geo.state === 'timeout') && (
+          <div className="sh-gps" role="status">
+            {geo.state === 'insecure'
+              ? 'Location is blocked because this page is open over plain http:// — open the app over HTTPS to see your position on the map.'
+              : geo.state === 'denied'
+                ? 'Location access is off — turn it on to see your position on the map.'
+                : 'Your location is unavailable right now — you can still browse the campus map.'}
+          </div>
+        )}
       </div>
 
       <div className="sh-top">
         <div className="sh-brand">Danfolio Logistics</div>
-        <button
-          type="button"
-          className="sh-icon"
-          onClick={signOut}
-          aria-label="Sign out"
-          title="Sign out"
-        >
-          ⏻
-        </button>
       </div>
 
       {tab === 'Home' && (
@@ -289,7 +346,7 @@ export default function StudentHome() {
                 ₦{Number(activeRide.fare).toLocaleString()}
               </span>
               <b>{activeRide.from?.name} → {activeRide.to?.name}</b>
-              <span>Tap to open your live ride screen →</span>
+              <span>Tap to track your ride live →</span>
             </Link>
           )}
 
@@ -367,7 +424,7 @@ export default function StudentHome() {
                       </p>
                       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                         <Link to={`/student/ride/${r.id}`}>Details</Link>
-                        {ticket && <Link to={`/student/ticket/${r.id}`}>Ticket</Link>}
+                        {ticket && <Link className="sh-mini-btn" to={`/student/ticket/${r.id}`}>Ticket</Link>}
                         {r.status === 'completed' && <Link to={`/student/review/${r.id}`}>Rate</Link>}
                         {r.status === 'completed' && <Link to={`/student/report/${r.id}`}>Report</Link>}
                       </div>

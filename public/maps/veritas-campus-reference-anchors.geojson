@@ -1,0 +1,353 @@
+{
+  "type": "FeatureCollection",
+  "name": "Veritas University campus reference anchors",
+  "metadata": {
+    "purpose": "Reference anchors for campus digitisation. These are not a replacement for the Supabase locations table.",
+    "coordinate_order": "[longitude, latitude]",
+    "source": "Coordinates supplied by the project owner; campus centroid reference from OpenStreetMap/Mapcarta."
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "id": "football-pitch",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          7.416992,
+          9.290247
+        ]
+      },
+      "properties": {
+        "name": "Football Pitch",
+        "category": "Sports & Recreation",
+        "usage": "drop-first",
+        "coordinate_source": "user-supplied",
+        "is_navigation_node": false
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "new-lecturer-theatre-(nlt)",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          7.416314,
+          9.2896
+        ]
+      },
+      "properties": {
+        "name": "New Lecturer Theatre (NLT)",
+        "category": "Lecture Hall",
+        "usage": "drop-first",
+        "coordinate_source": "user-supplied",
+        "is_navigation_node": false
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "block-a",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          7.416292,
+          9.289536
+        ]
+      },
+      "properties": {
+        "name": "Block A",
+        "category": "Academic Blocks",
+        "usage": "drop-first",
+        "coordinate_source": "user-supplied",
+        "is_navigation_node": false
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "block-b",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          7.415622,
+          9.288822
+        ]
+      },
+      "properties": {
+        "name": "Block B",
+        "category": "Academic Blocks",
+        "usage": "drop-first",
+        "coordinate_source": "user-supplied",
+        "is_navigation_node": false
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "block-c",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          7.415764,
+          9.288647
+        ]
+      },
+      "properties": {
+        "name": "Block C",
+        "category": "Academic Blocks",
+        "usage": "drop-first",
+        "coordinate_source": "user-supplied",
+        "is_navigation_node": false
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "block-d",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          7.415517,
+          9.287828
+        ]
+      },
+      "properties": {
+        "name": "Block D",
+        "category": "Academic Blocks",
+        "usage": "drop-first",
+        "coordinate_source": "user-supplied",
+        "is_navigation_node": false
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "mph",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          7.415811,
+          9.287756
+        ]
+      },
+      "properties": {
+        "name": "MPH",
+        "category": "Lecture Hall",
+        "usage": "drop-first",
+        "coordinate_source": "user-supplied",
+        "is_navigation_node": false
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "college-of-postgraduate",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          7.416725,
+          9.288558
+        ]
+      },
+      "properties": {
+        "name": "College of Postgraduate",
+        "category": "Academic Institution",
+        "usage": "drop-first",
+        "coordinate_source": "user-supplied",
+        "is_navigation_node": false
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "main-gate",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          7.416442,
+          9.296319
+        ]
+      },
+      "properties": {
+        "name": "Main Gate",
+        "category": "Gate / Entrance",
+        "usage": "drop-first",
+        "coordinate_source": "user-supplied",
+        "is_navigation_node": false
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "software-building",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          7.417597,
+          9.287317
+        ]
+      },
+      "properties": {
+        "name": "Software Building",
+        "category": "Academic Building",
+        "usage": "drop-first",
+        "coordinate_source": "user-supplied",
+        "is_navigation_node": false
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "auditorium-and-library",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          7.417361,
+          9.286592
+        ]
+      },
+      "properties": {
+        "name": "Auditorium and Library",
+        "category": "Lecture Hall",
+        "usage": "drop-first",
+        "coordinate_source": "user-supplied",
+        "is_navigation_node": false
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "sanet-building",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          7.417986,
+          9.285633
+        ]
+      },
+      "properties": {
+        "name": "SANET Building",
+        "category": "Special Facilities",
+        "usage": "drop-first",
+        "coordinate_source": "user-supplied",
+        "is_navigation_node": false
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "medicine-building",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          7.416014,
+          9.284933
+        ]
+      },
+      "properties": {
+        "name": "Medicine Building",
+        "category": "Academic Building",
+        "usage": "drop-first",
+        "coordinate_source": "user-supplied",
+        "is_navigation_node": false
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "law-building",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          7.418483,
+          9.289522
+        ]
+      },
+      "properties": {
+        "name": "Law Building",
+        "category": "Academic Building",
+        "usage": "drop-first",
+        "coordinate_source": "user-supplied",
+        "is_navigation_node": false
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "chapel",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          7.418431,
+          9.287972
+        ]
+      },
+      "properties": {
+        "name": "Chapel",
+        "category": "Special Facilities",
+        "usage": "drop-first",
+        "coordinate_source": "user-supplied",
+        "is_navigation_node": false
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "law-chapel-junction",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          7.417567,
+          9.2883
+        ]
+      },
+      "properties": {
+        "name": "Law/Chapel Junction",
+        "category": "Junction / Landmark",
+        "usage": "drop-first",
+        "coordinate_source": "user-supplied",
+        "is_navigation_node": false
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "hostel-n",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          7.410137,
+          9.287017
+        ]
+      },
+      "properties": {
+        "name": "Hostel N",
+        "category": "Boys' Hostel",
+        "usage": "pickup-only",
+        "coordinate_source": "user-supplied",
+        "is_navigation_node": false
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "hostel-m",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          7.410443,
+          9.286642
+        ]
+      },
+      "properties": {
+        "name": "Hostel M",
+        "category": "Boys' Hostel",
+        "usage": "pickup-only",
+        "coordinate_source": "user-supplied",
+        "is_navigation_node": false
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "hostel-k",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          7.411593,
+          9.286508
+        ]
+      },
+      "properties": {
+        "name": "Hostel K",
+        "category": "Boys' Hostel / Keke Station",
+        "usage": "pickup-and-drop-off",
+        "coordinate_source": "user-supplied",
+        "is_navigation_node": false
+      }
+    }
+  ]
+}

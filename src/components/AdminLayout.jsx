@@ -9,7 +9,7 @@ import '../pages/admin/admin.css'
 const nav = [
   { to: '/admin', label: 'Overview', end: true },
   { to: '/admin/kekes', label: 'Kekes' },
-  { to: '/admin/locations', label: 'Locations and fares' },
+  { to: '/admin/locations', label: 'Manage campus locations' },
   { to: '/admin/reports', label: 'Reports and tickets' },
   { to: '/admin/rides', label: 'Rides' },
   { to: '/admin/students', label: 'Students' },

@@ -2,10 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import CampusMap from '../../components/CampusMap.jsx'
 import BottomSheet from '../../components/BottomSheet.jsx'
-import { useAuth } from '../../lib/auth.jsx'
 import { supabase } from '../../lib/supabase'
 import { useGeolocation } from '../../lib/useGeolocation'
 import { distanceMeters, formatDistance, validCoord } from '../../lib/geo'
+import { formatDuration, shouldReroute } from '../../lib/routing'
+import { positionFreshness, proximityState, estimateArrivalSeconds } from '../../lib/tracking'
+// ONE source of truth with start-payment — the fee shown here is the fee
+// charged at checkout (no drift between booking and payment).
+import { SERVICE_FEE_NGN, rideTotal } from '../../../supabase/functions/_shared/policy.js'
 import './book.css'
 
 // BookFlow — the full-screen Bolt-style booking screen for both Drop and Along.
@@ -44,9 +48,6 @@ const ACTIVE_STATUSES = ['searching', 'accepted', 'paid', 'arrived', 'on_trip']
 
 // Sheet snaps in visibility order: peek (px), mid (fraction), full (fraction).
 const SHEET_SNAPS = [152, 0.46, 0.88]
-
-// Riders heartbeat every 20s; anything not seen for 90s is not "nearby".
-const KEKE_FRESH_MS = 90000
 
 // Locations arrive already grouped by the admin's category label; anything
 // without one lands in a visible "Other" group instead of vanishing.
@@ -96,7 +97,6 @@ const STATUS_COPY = {
 }
 
 export default function BookFlow({ initialMode = null }) {
-  const { signOut } = useAuth()
   const geo = useGeolocation()
   const routerLocation = useLocation()
   const navigate = useNavigate()
@@ -125,6 +125,12 @@ export default function BookFlow({ initialMode = null }) {
 
   const [activeRide, setActiveRide] = useState(null)
   const [statusError, setStatusError] = useState('')
+  // True while we check whether this student already has a running ride
+  // (blocks the booking CTA so the race is never user-visible).
+  const [joining, setJoining] = useState(true)
+  // Set when we land on an existing ride *instead of* the booking form —
+  // the "you already have an active ride" notice + Return button.
+  const [showActiveNotice, setShowActiveNotice] = useState(false)
 
   const [kekes, setKekes] = useState([])
   const [mapFailed, setMapFailed] = useState(false)
@@ -215,26 +221,31 @@ export default function BookFlow({ initialMode = null }) {
   // ------------------------------------------------------------------
   // Rejoin an already-active booking on mount (e.g. returning to this page)
   // ------------------------------------------------------------------
-  const joinedOnceRef = useRef(false)
-
+  // NOTE: deliberately NO "joined once" ref here. Under React.StrictMode
+  // (dev) this effect runs twice: the first run is cleaned up before its
+  // response lands, so a once-guard would leave the second run with
+  // nothing to do and the active-ride check (joining) permanently stuck,
+  // disabling the booking CTA. The duplicate query in dev is harmless.
   useEffect(() => {
-    if (joinedOnceRef.current) return
-    joinedOnceRef.current = true
-
     let active = true
 
     async function joinActiveRide() {
-      const { data } = await supabase
-        .from('rides')
-        .select(RIDE_SELECT)
-        .order('created_at', { ascending: false })
-        .limit(20)
+      try {
+        const { data } = await supabase
+          .from('rides')
+          .select(RIDE_SELECT)
+          .order('created_at', { ascending: false })
+          .limit(20)
 
-      if (!active) return
-      const row = (data ?? []).find((r) => ACTIVE_STATUSES.includes(r.status))
-      if (row) {
-        setActiveRide(row)
-        setSheetIndex(1)
+        if (!active) return
+        const row = (data ?? []).find((r) => ACTIVE_STATUSES.includes(r.status))
+        if (row) {
+          setActiveRide(row)
+          setShowActiveNotice(true)
+          setSheetIndex(1)
+        }
+      } finally {
+        if (active) setJoining(false)
       }
     }
 
@@ -443,35 +454,28 @@ export default function BookFlow({ initialMode = null }) {
     return () => window.clearInterval(timer)
   }, [activeRide?.status, activeRide?.created_at])
 
-  // Fresh = heartbeat within KEKE_FRESH_MS and real coordinates.
-  const freshKekes = useMemo(() => {
-    const now = Date.now()
-    return kekes.filter(
-      (k) =>
-        validCoord(k) &&
-        k.last_seen &&
-        now - new Date(k.last_seen).getTime() < KEKE_FRESH_MS,
-    )
-  }, [kekes])
+  // Every keke with real coordinates — CampusMap colours each badge by
+  // its heartbeat (live / updating slowly / offline), so the booking map
+  // shows what actually exists without ever claiming a stale fix is live.
+  const mapKekes = useMemo(() => {
+    const assignedId = activeRide?.keke_id ?? null
+    return kekes
+      .filter((k) => validCoord(k))
+      .map((k) => ({
+        ...k,
+        highlight: Boolean(assignedId) && k.id === assignedId,
+      }))
+  }, [kekes, activeRide?.keke_id])
 
   const assignedKeke = useMemo(
     () => (activeRide?.keke_id ? kekes.find((k) => k.id === activeRide.keke_id) ?? null : null),
     [kekes, activeRide?.keke_id],
   )
 
-  // Map markers: EVERY live keke, free or already carrying passengers (a
-  // keke holds up to 4), with the assigned rider highlighted.
-  const mapKekes = useMemo(() => {
-    const assignedId = activeRide?.keke_id ?? null
-    return freshKekes.map((k) => ({
-      ...k,
-      highlight: Boolean(assignedId) && k.id === assignedId,
-    }))
-  }, [freshKekes, activeRide?.keke_id])
-
   // How far the assigned keke is from where the student is waiting.
-  // Straight-line distance against the live position — a real number, never
-  // a made-up ETA. Hidden once the trip is under way (the progress bar
+  // Straight-line distance against the live position — a real measurement,
+  // displayed to the student as a time-to-arrival (kekeArrivalEta), never
+  // a made-up number. Hidden once the trip is under way (the progress bar
   // covers that) or when coordinates are missing.
   const kekeProximity = useMemo(() => {
     if (!assignedKeke || !validCoord(assignedKeke)) return null
@@ -487,6 +491,21 @@ export default function BookFlow({ initialMode = null }) {
     }
   }, [assignedKeke, activeRide?.status, activeRide?.from, geo.position])
 
+  // Honest proximity phase for the badge above: only a LIVE heartbeat may
+  // claim "nearby" or "approaching" — a stale/lost fix reports
+  // "unavailable" with its real age instead of a made-up closeness.
+  const kekePhase = useMemo(() => {
+    if (!kekeProximity) return null
+    const freshness = positionFreshness(assignedKeke?.last_seen)
+    return {
+      freshness,
+      state: proximityState({
+        distance: kekeProximity.meters,
+        fresh: freshness.state === 'live',
+      }),
+    }
+  }, [kekeProximity, assignedKeke?.last_seen])
+
   const mapPoints = useMemo(() => {
     if (activeRide) {
       return [activeRide.from, activeRide.to].filter((p) => validCoord(p))
@@ -498,11 +517,74 @@ export default function BookFlow({ initialMode = null }) {
     return froms.filter((p) => validCoord(p))
   }, [activeRide, choosingType, locations, from, to, froms, tos])
 
+  // Phase-aware route (spec 5/7): while the assigned rider heads over, the
+  // real road path runs keke → pick-up; otherwise (planning, searching,
+  // on trip) it runs pick-up → destination. A road route is only
+  // re-requested after a real ≥30 m origin move (shouldReroute), so live
+  // GPS ticks don't hammer the routing provider.
+  const routeRef = useRef(null)
   const routeLine = useMemo(() => {
-    const a = activeRide ? activeRide.from : from
-    const b = activeRide ? activeRide.to : to
-    return validCoord(a) && validCoord(b) ? { from: a, to: b } : null
-  }, [activeRide, from, to])
+    let desired = null
+
+    if (activeRide) {
+      const kekePos =
+        assignedKeke && validCoord(assignedKeke)
+          ? { lat: Number(assignedKeke.lat), lng: Number(assignedKeke.lng) }
+          : null
+      if (
+        ['accepted', 'paid', 'arrived'].includes(activeRide.status) &&
+        kekePos &&
+        validCoord(activeRide.from)
+      ) {
+        desired = { from: kekePos, to: activeRide.from }
+      } else if (validCoord(activeRide.from) && validCoord(activeRide.to)) {
+        desired = { from: activeRide.from, to: activeRide.to }
+      }
+    } else if (validCoord(from) && validCoord(to)) {
+      desired = { from, to }
+    }
+
+    if (!desired) {
+      routeRef.current = null
+      return null
+    }
+
+    const destKey = String(desired.to?.id ?? `${desired.to.lat},${desired.to.lng}`)
+    const gate = routeRef.current
+    if (gate && gate.destKey === destKey && gate.route && !shouldReroute(desired.from, gate.origin)) {
+      return gate.route // same object → the map does not re-fetch
+    }
+    routeRef.current = { origin: desired.from, destKey, route: desired }
+    return desired
+  }, [activeRide, assignedKeke, from, to])
+
+  // Which leg the current ETA measures — used so the pill's words always
+  // match the line drawn on the map (never label a full-route estimate as
+  // a keke arrival time).
+  const etaIsKekeLeg = Boolean(
+    activeRide &&
+      ['accepted', 'paid', 'arrived'].includes(activeRide.status) &&
+      assignedKeke &&
+      validCoord(assignedKeke),
+  )
+
+  // Time-to-arrival for the proximity badge (the user wants minutes, not
+  // metres): the road ETA when the router answered for the keke leg,
+  // otherwise an honest estimate scaled from the REAL measured distance.
+  // Null without a distance — never a number from nothing.
+  const kekeArrivalEta = useMemo(() => {
+    if (!kekeProximity || !Number.isFinite(kekeProximity.meters)) return null
+    const roadSeconds =
+      etaIsKekeLeg && Number.isFinite(routeEta?.seconds) && routeEta.seconds > 0
+        ? routeEta.seconds
+        : null
+    const estimateSeconds = estimateArrivalSeconds({
+      distanceMeters: kekeProximity.meters,
+    })
+    const seconds = roadSeconds ?? estimateSeconds
+    if (seconds === null) return null
+    return { seconds, source: roadSeconds !== null ? 'road' : 'estimate' }
+  }, [kekeProximity, etaIsKekeLeg, routeEta?.seconds])
 
   const selectedId = activeRide ? null : (to?.id ?? from?.id ?? null)
 
@@ -652,14 +734,30 @@ export default function BookFlow({ initialMode = null }) {
         })
       }
       setSheetIndex(1)
+      setShowActiveNotice(false)
     } catch (error) {
       let detail = error?.message || 'Could not create your ride.'
+      let existingRideId = null
 
       if (error?.context && typeof error.context.clone === 'function') {
         try {
           const payload = await error.context.clone().json()
           detail = payload?.error || payload?.message || detail
+          if (payload?.ride_id) existingRideId = payload.ride_id
         } catch {}
+      }
+
+      // 409 — this student already has a running ride. Load THAT ride so
+      // the screen shows it (with the Return to Active Ride button) instead
+      // of a dead-end error message.
+      if (existingRideId) {
+        const row = await fetchRide(existingRideId)
+        if (row) {
+          setShowActiveNotice(true)
+          setSheetIndex(1)
+          setMessage('')
+          return
+        }
       }
 
       console.error('Ride booking error:', error)
@@ -700,6 +798,7 @@ export default function BookFlow({ initialMode = null }) {
 
   function tryAgain() {
     setActiveRide(null)
+    setShowActiveNotice(false)
     setStatusError('')
     setMessage('')
     setFrom(null)
@@ -787,20 +886,26 @@ export default function BookFlow({ initialMode = null }) {
             </p>
           )}
           {(geo.state === 'denied' ||
+            geo.state === 'insecure' ||
             geo.state === 'unavailable' ||
             geo.state === 'timeout') && (
             <p className="bk-sub">
-              {geo.state === 'denied'
-                ? 'Location access is off — you can still pick any point from the list.'
-                : 'We could not get your location — you can still pick any point from the list.'}{' '}
-              <button
-                type="button"
-                className="link"
-                style={{ display: 'inline', height: 'auto', margin: 0 }}
-                onClick={geo.request}
-              >
-                Try again
-              </button>
+              {geo.state === 'insecure'
+                ? 'Location is blocked because this page is open over plain http:// — open the app over HTTPS. You can still pick any point from the list.'
+                : geo.state === 'denied'
+                  ? 'Location access is off — you can still pick any point from the list.'
+                  : 'We could not get your location — you can still pick any point from the list.'}{' '}
+              {/* Retrying cannot fix an insecure origin — only HTTPS can. */}
+              {geo.state !== 'insecure' && (
+                <button
+                  type="button"
+                  className="link"
+                  style={{ display: 'inline', height: 'auto', margin: 0 }}
+                  onClick={geo.request}
+                >
+                  Try again
+                </button>
+              )}
             </p>
           )}
 
@@ -878,13 +983,20 @@ export default function BookFlow({ initialMode = null }) {
         )}
 
         {to && fareState === 'ready' && (
-          <div className="bk-fare">
-            <span>
-              Fixed fare
-              <small>Same price for everyone, every time.</small>
-            </span>
-            <b>₦{Number(fare).toLocaleString('en-NG')}</b>
-          </div>
+          <>
+            <div className="bk-fare">
+              <span>
+                Fixed fare
+                <small>Same price for everyone, every time.</small>
+              </span>
+              <b>₦{Number(fare).toLocaleString('en-NG')}</b>
+            </div>
+            <p className="bk-sub bk-fee-note">
+              + ₦{SERVICE_FEE_NGN} service fee ={' '}
+              <strong>₦{rideTotal(Number(fare), SERVICE_FEE_NGN).toLocaleString('en-NG')}</strong>{' '}
+              total at payment. Your Keke receives the full fare.
+            </p>
+          </>
         )}
 
         {to && fareState === 'loading' && (
@@ -898,10 +1010,17 @@ export default function BookFlow({ initialMode = null }) {
           <div className="error">No fare is set for this route yet.</div>
         )}
 
-        {to && routeEta && (
+        {to && routeEta?.seconds != null && (
           <p className="bk-sub">
-            ≈ {Math.max(1, Math.round(routeEta.seconds / 60))} min by road
-            {' '}(OpenStreetMap/OSRM estimate)
+            ≈ {formatDuration(routeEta.seconds)} by road
+            {' '}(road estimate from OpenStreetMap/OSRM)
+          </p>
+        )}
+
+        {joining && (
+          <p className="bk-sub" role="status">
+            <span className="bk-spin dark" aria-hidden="true" />
+            Checking for an active ride…
           </p>
         )}
 
@@ -914,7 +1033,7 @@ export default function BookFlow({ initialMode = null }) {
         <button
           type="button"
           className="bk-cta"
-          disabled={!to || fare === null || booking}
+          disabled={!to || fare === null || booking || joining}
           onClick={createRide}
         >
           {booking && <span className="bk-spin" aria-hidden="true" />}
@@ -975,6 +1094,21 @@ export default function BookFlow({ initialMode = null }) {
 
     return (
       <>
+        {/* The student came here to book; this running ride is why they
+            can't. Explain it and take them straight to the real ride. */}
+        {showActiveNotice && !isFinished && (
+          <div className="bk-already" role="status">
+            <b>You already have an active ride</b>
+            <p>
+              A booking is still running — you can’t start another one until
+              it finishes or is cancelled.
+            </p>
+            <Link className="btn bk-cta" to={`/student/ride/${activeRide.id}`}>
+              Return to Active Ride
+            </Link>
+          </div>
+        )}
+
         <p className="bk-step">{copy.title}</p>
         <p className="bk-sub">{copy.body}</p>
 
@@ -1009,11 +1143,37 @@ export default function BookFlow({ initialMode = null }) {
         )}
 
         {/* Live proximity of the assigned keke — straight-line distance to
-            wherever the student is waiting, straight from its heartbeat. */}
-        {kekeProximity && (
-          <p className="bk-proximity" role="status">
-            <span className="bk-live" aria-hidden="true" />
-            Keke {formatDistance(kekeProximity.meters)} {kekeProximity.label}
+            wherever the student is waiting, straight from its heartbeat.
+            The state word (nearby / approaching) only appears while the
+            heartbeat is live; a stale or missing fix says so instead. */}
+        {kekeProximity && kekePhase && (
+          <p
+            className={'bk-proximity' + (kekePhase.state === 'unavailable' ? ' off' : '')}
+            role="status"
+          >
+            {kekePhase.state === 'unavailable' ? (
+              <>
+                <span className="bk-live dim" aria-hidden="true" />
+                Keke location unavailable — {kekePhase.freshness.label}
+              </>
+            ) : (
+              <>
+                <span className="bk-live" aria-hidden="true" />
+                {/* Time-to-arrival, not metres — same honest wording as
+                    the ride screen; the phase word stays beside it. */}
+                {kekeArrivalEta
+                  ? `Keke reaching you in ≈ ${formatDuration(kekeArrivalEta.seconds)}${
+                      kekeArrivalEta.source === 'road' ? ' by road' : ' (distance estimate)'
+                    }`
+                  : `Keke ${formatDistance(kekeProximity.meters)} ${kekeProximity.label}`}
+                {kekePhase.state !== 'far' && (
+                  <>
+                    {' · '}
+                    <b>{kekePhase.state}</b>
+                  </>
+                )}
+              </>
+            )}
           </p>
         )}
 
@@ -1063,6 +1223,12 @@ export default function BookFlow({ initialMode = null }) {
         {['paid', 'arrived', 'on_trip', 'completed'].includes(status) && (
           <Link className="btn secondary bk-cta" to={`/student/ride/${activeRide.id}`}>
             Open live ride screen
+          </Link>
+        )}
+
+        {['paid', 'arrived', 'on_trip', 'completed'].includes(status) && (
+          <Link className="btn secondary bk-cta" to={`/student/ticket/${activeRide.id}`}>
+            Open ticket
           </Link>
         )}
 
@@ -1175,33 +1341,38 @@ export default function BookFlow({ initialMode = null }) {
 
       {dimMap && <div className="bk-dim" aria-hidden="true" />}
 
-      {activeRide && routeEta && (
+      {activeRide && routeEta?.seconds != null && (
         <div className="bk-pill">
-          ≈ {Math.max(1, Math.round(routeEta.seconds / 60))} min by road
+          {etaIsKekeLeg
+            ? `Keke reaching you in ≈ ${formatDuration(routeEta.seconds)}`
+            : activeRide.status === 'on_trip'
+              ? `Trip ≈ ${formatDuration(routeEta.seconds)} by road`
+              : `≈ ${formatDuration(routeEta.seconds)} by road`}
         </div>
       )}
 
       <div className="bk-top">
-        <Link
+        {/* A real button: linking to the route we are already on is a
+            no-op in the router (that is why this back control "did
+            nothing" on the active-ride notice). Going home from the
+            notice, or one step back to the type chooser from Drop/Along,
+            always changes the screen. */}
+        <button
+          type="button"
           className="bk-back"
-          to={choosingType ? '/student' : '/student/book'}
           aria-label="Back"
+          onClick={() => {
+            if (choosingType || activeRide) navigate('/student')
+            else setMode(null)
+          }}
         >
           ‹
-        </Link>
+        </button>
         <div className="bk-title">
           Danfolio ·{' '}
           {choosingType ? 'Book a ride' : isDrop ? 'Drop' : 'Along'}
         </div>
-        <button
-          type="button"
-          className="bk-signout"
-          onClick={signOut}
-          aria-label="Sign out"
-          title="Sign out"
-        >
-          ⏻
-        </button>
+        {/* Sign-out lives on the Profile tab only — no scattered ⏻ buttons. */}
       </div>
 
       {!online && (
