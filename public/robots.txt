@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+
+Disallow: /admin
+Disallow: /student
+Disallow: /rider
+Disallow: /dashboard
+Disallow: /keke
+Disallow: /map
+
+Sitemap: https://danfolio-logistics.vercel.app/sitemap.xml
