@@ -9,7 +9,12 @@
 // Pure helpers are exported separately from the Supabase read so this module
 // can be unit-tested without a client (tests/campusSettings.test.js).
 
-export const DEFAULT_CAMPUS_CENTER = { lat: 8.4799, lng: 4.5226 } // Unilorin-area fallback
+// Veritas University campus (Abuja). This MUST match CampusMap's FALLBACK_CENTER
+// and the coordinates stored on public.locations (≈ lat 9.285–9.296,
+// lng 7.410–7.418). The previous value (8.4799, 4.5226) is Ilorin, ~600 km
+// away, and campus_settings has no row yet — so every student map opened on
+// the wrong part of Nigeria instead of the campus.
+export const DEFAULT_CAMPUS_CENTER = { lat: 9.2895, lng: 7.416 }
 export const DEFAULT_CAMPUS_ZOOM = 14
 
 // Validation for the admin form. Returns { ok, errors } — never throws.
@@ -146,9 +151,14 @@ export function resolveCampusCamera(settings) {
     ? dbZoom
     : null
 
+  // Compare by VALUE, not identity: envCenter() returns a fresh object, so
+  // `center !== DEFAULT_CAMPUS_CENTER` was always true and reported 'env'
+  // even when the effective camera was the built-in default.
+  const fromEnv = !fromDb && envCenter() !== null
+
   return {
     center,
     zoom: zoomFromDb ?? envZoom ?? DEFAULT_CAMPUS_ZOOM,
-    source: fromDb ? 'settings' : (center !== DEFAULT_CAMPUS_CENTER ? 'env' : 'default'),
+    source: fromDb ? 'settings' : fromEnv ? 'env' : 'default',
   }
 }
