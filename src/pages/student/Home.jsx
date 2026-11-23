@@ -154,7 +154,12 @@ export default function StudentHome() {
           )}
 
           <h2 style={{ marginTop: 28 }}>Recent rides</h2>
-          {rides === null && <p className="muted">Loading…</p>}
+          {rides === null && (
+            <div aria-hidden="true">
+              <div className="skeleton skeleton-card" />
+              <div className="skeleton skeleton-card" />
+            </div>
+          )}
           {rides && rides.length === 0 && (
             <div className="card muted">No rides yet. Book your first one.</div>
           )}
@@ -178,7 +183,12 @@ export default function StudentHome() {
       {tab === 'Rides' && (
         <>
           <h2>My rides</h2>
-          {rides === null && <p className="muted">Loading…</p>}
+          {rides === null && (
+            <div aria-hidden="true">
+              <div className="skeleton skeleton-card" />
+              <div className="skeleton skeleton-card" />
+            </div>
+          )}
           {rides && pastRides.length === 0 && (
             <div className="card muted">No finished rides yet.</div>
           )}

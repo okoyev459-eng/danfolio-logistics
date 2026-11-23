@@ -26,6 +26,18 @@
   touch-action: none; /* the header drags the sheet; the body scrolls */
   user-select: none;
   -webkit-user-select: none;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
+.bs-header:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: -4px;
+  border-radius: 18px 18px 0 0;
 }
 
 .bs-dragging .bs-header {

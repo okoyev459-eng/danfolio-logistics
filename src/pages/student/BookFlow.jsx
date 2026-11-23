@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import CampusMap from '../../components/CampusMap.jsx'
 import BottomSheet from '../../components/BottomSheet.jsx'
+import InstallAppButton from '../../components/InstallAppButton.jsx'
 import { useAuth } from '../../lib/auth.jsx'
 import { supabase } from '../../lib/supabase'
 import { useGeolocation } from '../../lib/useGeolocation'
@@ -37,8 +38,9 @@ const RIDE_SELECT =
 
 const ACTIVE_STATUSES = ['searching', 'accepted', 'paid', 'arrived', 'on_trip']
 
-// Sheet snaps in visibility order: peek (px), mid (fraction), full (fraction).
-const SHEET_SNAPS = [152, 0.46, 0.88]
+// Sheet snaps in visibility order. Fractions keep the map dominant in the
+// collapsed state (>50% visible) while still exposing clear booking controls.
+const SHEET_SNAPS = [0.28, 0.54, 0.88]
 
 // Riders heartbeat every 20s; anything not seen for 90s is not "nearby".
 const KEKE_FRESH_MS = 90000
@@ -108,6 +110,7 @@ export default function BookFlow({ mode }) {
   )
   const [cancelling, setCancelling] = useState(false)
   const [confirmCancel, setConfirmCancel] = useState(false)
+  const [bookedFlash, setBookedFlash] = useState(false)
 
   // Map camera API (zoom / recenter / fit), driven by the FAB controls.
   const mapRef = useRef(null)
@@ -471,6 +474,7 @@ export default function BookFlow({ mode }) {
           to,
         })
       } else {
+        setBookedFlash(true)
         setActiveRide({
           id: data.ride_id,
           fare: data.fare,
@@ -479,6 +483,7 @@ export default function BookFlow({ mode }) {
           from,
           to,
         })
+        window.setTimeout(() => setBookedFlash(false), 1400)
       }
       setSheetIndex(1)
     } catch (error) {
@@ -780,6 +785,14 @@ export default function BookFlow({ mode }) {
           </div>
         )}
 
+        {bookedFlash && (
+          <div className="bk-booked pop-in" role="status" aria-live="polite">
+            <div className="success-check" aria-hidden="true">✓</div>
+            <p className="bk-step" style={{ margin: 0 }}>Ride requested</p>
+            <p className="bk-sub" style={{ marginBottom: 0 }}>We’re finding an eligible Keke now.</p>
+          </div>
+        )}
+
         {status === 'searching' && (
           <p className="bk-sub" role="status" aria-live="polite">
             <span className="bk-spin dark" aria-hidden="true" />
@@ -925,6 +938,7 @@ export default function BookFlow({ mode }) {
           ‹
         </Link>
         <div className="bk-title">Danfolio · {isDrop ? 'Drop' : 'Along'}</div>
+        <InstallAppButton className="bk-install" />
         <button
           type="button"
           className="bk-signout"

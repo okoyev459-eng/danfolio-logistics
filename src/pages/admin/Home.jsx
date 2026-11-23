@@ -89,11 +89,17 @@ export default function AdminHome() {
     <Layout title="Admin">
       <h2>Dashboard</h2>
       {error && <div className="error">{error}</div>}
-      {!stats && !error && <p className="muted">Loading…</p>}
+      {!stats && !error && (
+        <div aria-hidden="true">
+          <div className="skeleton skeleton-card" />
+          <div className="skeleton skeleton-card" />
+          <div className="skeleton skeleton-card" />
+        </div>
+      )}
 
       {stats && (
-        <>
-          <div className="fare">
+        <div className="app-fade">
+          <div className="fare pop-in">
             <span>Revenue recorded today</span>
             <b>₦{stats.revenueToday.toLocaleString()}</b>
             <span className="badge">{stats.completedToday} trips completed today</span>
@@ -113,7 +119,7 @@ export default function AdminHome() {
           {card('Registered students', stats.students)}
           {card('Open reports', stats.openReports)}
           {card('Lifetime refunded (₦)', stats.refundedTotal.toLocaleString())}
-        </>
+        </div>
       )}
 
       <h2 style={{ marginTop: 24 }}>Manage</h2>
