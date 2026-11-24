@@ -1,0 +1,28 @@
+-- Security hardening: the anon role keeps no privilege on public.campus_settings.
+--
+-- Verified live 2026-11-23 (pg_class.relacl + information_schema):
+--   campus_settings = {postgres=arwdDxtm/postgres,
+--                      anon=arwdDxtm/postgres,
+--                      authenticated=arwdDxtm/postgres,
+--                      service_role=arwdDxtm/postgres}
+-- so the publishable anon key held DELETE, INSERT, REFERENCES, SELECT,
+-- TRIGGER, TRUNCATE and UPDATE on the campus configuration table. TRUNCATE and
+-- TRUNCATE-only damage is not filtered by RLS at all, and 20261123100500 only
+-- closed the INSERT/UPDATE/DELETE half of that (its TRUNCATE loop runs before
+-- this table existed in the backlog order, and SELECT was left behind).
+--
+-- Nothing legitimately reads campus_settings without a session:
+--   * the only policies are "campus_settings read" (authenticated, SELECT) and
+--     "campus_settings write" (authenticated, ALL);
+--   * every app read happens after sign-in (src/pages/keke/* and the admin
+--     settings screen), and reads on the landing/login screens use locations,
+--     fares and kekes, not campus_settings;
+--   * Edge Functions use the service role, whose grant is untouched.
+-- With RLS enabled and no anon policy, anon already saw zero rows, so revoking
+-- SELECT removes an unused grant and closes the non-RLS privileges outright.
+--
+-- Safety: grants only, for the anon role only. No row, column, policy, function
+-- or lifecycle rule changes; authenticated and service_role keep full access,
+-- so admin campus configuration and the live map still work.
+
+revoke all on table public.campus_settings from anon;
