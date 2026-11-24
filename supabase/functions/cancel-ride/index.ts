@@ -1,32 +1,28 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { isCashMethod } from '../_shared/policy.js'
+import { decideStudentCancellation } from '../_shared/refundPolicy.js'
 
 // cancel-ride — student cancels their own booking.
 //
 // Spec (PROJECT_SPEC.md function table):
 //   cancel-ride (student, ride_id): `searching`/`accepted`/`arrived` ->
-//   `cancelled`, free the keke; `paid` (and any other pre-boarding status
-//   with a digital payment) -> calls refund-ride.
+//   `cancelled`, free the keke; a settled digital payment -> refund-ride.
 //   Returns { status }.
 //
 // Rules:
 //   - Caller must be the ride's own student, or a signed-in admin (admins can
-//     clear stuck searching/accepted bookings; paid rides are refunded via
-//     admin-refund instead).
-//   - searching / accepted / arrived -> cancelled. 'arrived' means the keke
-//     is at the pick-up but the student has NOT boarded. If a keke was
-//     assigned, it is released back to 'online' — guarded on
-//     kekes.status='on_trip' so a concurrent trip state is never clobbered.
-//   - paid (and paid-arrived) -> server-to-server call to the existing
-//     refund-ride function, which refunds through Paystack, marks payment +
-//     ride refunded and frees the keke. This function never talks to
-//     Paystack itself.
-//   - on_trip / completed / cancelled / refunded -> 409, except
-//     that an already-cancelled or already-refunded ride reports success so
-//     retries after a dropped response are safe. An on_trip interruption is
-//     rider-cancel-ride's flow, never this one.
+//     clear stuck searching/accepted bookings; paid rides can also be refunded
+//     via admin-refund).
+//   - The payment is checked BEFORE the status branch: a paid booking that a
+//     rider re-dispatched back to 'searching' (or that sits at 'accepted') is
+//     REFUNDED, never silently cancelled for free.
+//   - A cash payment never reached Paystack: the booking closes and the
+//     student is told the cash refund is settled by hand (no Paystack call).
+//   - on_trip / completed are refused. An interrupted trip is handled by
+//     support and admin-refund, never by this function.
+//   - Retry-safe: an already cancelled/refunded ride reports success.
 //
-// Auth: caller must be a signed-in student. Only service-role writes.
+// The decision itself lives in _shared/refundPolicy.js so the hermetic tests
+// exercise the very function production runs.
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -109,11 +105,13 @@ Deno.serve(async (req) => {
       return respond({ error: 'Ride not found for this student.' }, 404)
     }
 
+    const actorRole = isAdmin && ride.student_id !== user.id ? 'admin' : 'student'
+
     async function auditEvent(event: string, metadata: Record<string, unknown>) {
       const { error } = await adminClient.from('ride_events').insert({
         ride_id: rideId,
         actor_id: user.id,
-        actor_role: isAdmin && ride?.student_id !== user.id ? 'admin' : 'student',
+        actor_role: actorRole,
         event,
         reason: 'student_cancelled',
         from_status: ride?.status ?? null,
@@ -122,19 +120,30 @@ Deno.serve(async (req) => {
       if (error) console.error('cancel-ride: could not record event:', error)
     }
 
-    // Retry-safe: a finished cancellation reports success.
-    if (ride.status === 'cancelled') {
+    const { data: payment, error: paymentError } = await adminClient
+      .from('payments')
+      .select('id, status, method, refund_status')
+      .eq('ride_id', rideId)
+      .maybeSingle()
+
+    if (paymentError) throw paymentError
+
+    const decision = decideStudentCancellation({ ride, payment })
+
+    if (decision.action === 'already_cancelled') {
       return respond({ status: 'cancelled', ride_id: rideId, already_cancelled: true })
     }
-    if (ride.status === 'refunded') {
-      return respond({ status: 'refunded', ride_id: rideId, already_refunded: true })
+
+    if (decision.action === 'already_refunded') {
+      return respond({
+        status: 'refunded',
+        ride_id: rideId,
+        already_refunded: true,
+        refund_status: payment?.refund_status ?? null,
+      })
     }
 
-    // An interrupted (post-boarding) trip is never cancelled from the
-    // student app: the student is or was aboard, the rider recorded a
-    // breakdown, and an admin arranges the replacement. Refund decisions
-    // for interrupted trips belong to admin-refund, never automatic.
-    if (ride.interrupted_at && ride.status === 'on_trip') {
+    if (decision.action === 'blocked_interrupted') {
       return respond({
         error:
           'Your trip was interrupted and is being handled by support — a ' +
@@ -146,36 +155,17 @@ Deno.serve(async (req) => {
       }, 409)
     }
 
-    // Finished rides are never cancelled from the app. This must sit BEFORE
-    // the payment branch below, or a completed ride with a successful
-    // payment would fall into the refund path.
-    if (ride.status === 'completed') {
+    if (decision.action === 'blocked_completed') {
       return respond({
-        error:
-          'This booking is already completed and can no longer be cancelled.',
+        error: 'This booking is already completed and can no longer be cancelled.',
         status: ride.status,
       }, 409)
     }
 
-    // Payment checked BEFORE the status branch: a paid booking that a rider
-    // re-dispatched back to 'searching' (or that sits at 'accepted') must
-    // still be REFUNDED, never silently cancelled without one. This is the
-    // fix for the "cancelled a paid ride with no refund" bug.
-    const { data: payment, error: paymentError } = await adminClient
-      .from('payments')
-      .select('id, status, method')
-      .eq('ride_id', rideId)
-      .maybeSingle()
-
-    if (paymentError) throw paymentError
-
-    // Legacy rows have method = NULL and were all Paystack charges, so only
-    // an explicit 'cash' method is excluded from the automatic refund path.
-    const digitalPaid = payment?.status === 'success' && !isCashMethod(payment.method)
-
-    if (digitalPaid && ride.status !== 'on_trip') {
-      // Server-to-server call to the existing refund-ride function. It holds
-      // the Paystack logic and frees the keke itself.
+    // Server-to-server call to refund-ride. It holds the Paystack logic, the
+    // idempotency lock and the keke release; this function never calls
+    // Paystack itself. The reason and actor are recorded there too.
+    async function requestRefundViaService(fallback: boolean) {
       let refundResponse: Response
 
       try {
@@ -187,7 +177,12 @@ Deno.serve(async (req) => {
               Authorization: `Bearer ${serviceRoleKey}`,
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ ride_id: rideId }),
+            body: JSON.stringify({
+              ride_id: rideId,
+              reason: 'student_cancelled',
+              actor_id: user.id,
+              actor_role: actorRole,
+            }),
             signal: AbortSignal.timeout(25000),
           },
         )
@@ -215,16 +210,23 @@ Deno.serve(async (req) => {
       await auditEvent('refund_initiated', {
         payment_id: payment?.id ?? null,
         method: payment?.method ?? null,
+        refund_status: refundData?.refund_status ?? null,
+        fallback,
       })
 
       return respond({
-        status: 'refunded',
+        status: refundData?.status ?? 'refund_pending',
         ride_id: rideId,
+        refund_status: refundData?.refund_status ?? null,
         message: refundData?.message,
       })
     }
 
-    if (payment?.status === 'success' && isCashMethod(payment.method)) {
+    if (decision.action === 'refund') {
+      return requestRefundViaService(Boolean(payment?.status === 'paid'))
+    }
+
+    if (decision.action === 'cancel_cash_manual') {
       // Cash was collected by the rider: no Paystack refund exists to make.
       // Close the booking and tell the student exactly what happens next.
       const { data: cashClosed, error: cashCloseError } = await adminClient
@@ -255,63 +257,7 @@ Deno.serve(async (req) => {
       })
     }
 
-    if (ride.status === 'paid') {
-      // A settled payment with an unknown/legacy method: still go through
-      // refund-ride rather than cancelling a paid ride for free — it
-      // re-verifies the payment server-side (and its cash guard runs first).
-      let refundResponse: Response
-      try {
-        refundResponse = await fetch(
-          `${supabaseUrl}/functions/v1/refund-ride`,
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${serviceRoleKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ ride_id: rideId }),
-            signal: AbortSignal.timeout(25000),
-          },
-        )
-      } catch {
-        console.error('cancel-ride: refund-ride could not be reached.')
-        return respond({
-          error:
-            'We could not confirm the refund request. Please try again shortly or contact support.',
-        }, 502)
-      }
-
-      const refundData = await refundResponse.json().catch(() => null)
-
-      if (!refundResponse.ok || refundData?.error) {
-        return respond({
-          error: refundData?.error || 'The refund could not be completed.',
-        }, refundResponse.status >= 400 && refundResponse.status < 600 ? refundResponse.status : 502)
-      }
-
-      await auditEvent('refund_initiated', {
-        payment_id: payment?.id ?? null,
-        method: payment?.method ?? null,
-        fallback: true,
-      })
-
-      return respond({
-        status: 'refunded',
-        ride_id: rideId,
-        message: refundData?.message,
-      })
-    }
-
-    // Pre-boarding statuses only. 'arrived' is included: the keke is at
-    // the pick-up but the student has NOT boarded, so walking away is an
-    // ordinary cancellation (a digital payment was already refunded above,
-    // a cash one closed above). 'on_trip' stays refused — an aboard student
-    // goes through the interruption flow, never this one.
-    if (
-      ride.status !== 'searching' &&
-      ride.status !== 'accepted' &&
-      ride.status !== 'arrived'
-    ) {
+    if (decision.action !== 'cancel') {
       return respond({
         error:
           `This booking can no longer be cancelled from the app because its ` +
@@ -320,6 +266,8 @@ Deno.serve(async (req) => {
       }, 409)
     }
 
+    // Pre-boarding, nothing settled: close the booking. 'arrived' is
+    // included — the keke is at the pick-up but the student has NOT boarded.
     const { data: updated, error: updateError } = await adminClient
       .from('rides')
       .update({ status: 'cancelled' })
@@ -363,10 +311,11 @@ Deno.serve(async (req) => {
 
     await auditEvent('booking_cancelled', {
       payment_status: payment?.status ?? 'none',
+      refund: 'not_needed',
       released_keke_id: updated.keke_id ?? null,
     })
 
-    return respond({ status: 'cancelled', ride_id: rideId })
+    return respond({ status: 'cancelled', ride_id: rideId, refund: 'not_needed' })
   } catch (error) {
     console.error('cancel-ride failed:', error)
     return respond({ error: 'Could not cancel the ride. Please try again.' }, 500)
