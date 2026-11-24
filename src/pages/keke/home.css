@@ -838,3 +838,57 @@
   border-color: #fca5a5;
   color: #991b1b;
 }
+
+/* ==========================================================================
+   Motion polish (pairs with the global motion.css layer)
+   ========================================================================== */
+
+/* Home entrance choreography — one-shot on mount (React re-renders never
+   restart these; the DOM node must be replaced). */
+.keke-hero-top { animation: mv-rise 0.45s var(--mv-spring, cubic-bezier(0.22, 0.9, 0.24, 1)) both; }
+.keke-earnings-today { animation: mv-rise 0.45s var(--mv-spring, cubic-bezier(0.22, 0.9, 0.24, 1)) 0.08s both; }
+.keke-stats .keke-stat { animation: mv-rise 0.45s var(--mv-spring, cubic-bezier(0.22, 0.9, 0.24, 1)) both; }
+.keke-stats .keke-stat:nth-child(2) { animation-delay: 0.07s; }
+.keke-stats .keke-stat:nth-child(3) { animation-delay: 0.14s; }
+.keke-hint { animation: mv-rise 0.45s var(--mv-spring, cubic-bezier(0.22, 0.9, 0.24, 1)) 0.16s both; }
+.keke-content > h2 { animation: mv-rise 0.45s var(--mv-spring, cubic-bezier(0.22, 0.9, 0.24, 1)) 0.2s both; }
+.keke-tab-placeholder > * { animation: mv-fade 0.3s ease both; }
+.keke-tab-placeholder > *:nth-child(2) { animation-delay: 0.05s; }
+.keke-tab-placeholder > *:nth-child(3) { animation-delay: 0.1s; }
+.keke-bottom-nav { animation: mv-slide-up 0.4s var(--mv-spring, cubic-bezier(0.22, 0.9, 0.24, 1)) 0.1s both; }
+
+/* Bottom-nav active indicator (absolute — never changes nav height). */
+.keke-bottom-nav button { position: relative; }
+.keke-bottom-nav button::after {
+  content: '';
+  position: absolute;
+  left: 24%;
+  right: 24%;
+  bottom: 6px;
+  height: 3px;
+  border-radius: 2px;
+  background: #2865f5;
+  transform: scaleX(0);
+  transition: transform 0.28s cubic-bezier(0.22, 0.9, 0.24, 1);
+}
+.keke-bottom-nav button.active::after { transform: scaleX(1); }
+.keke-bottom-nav button:active { transform: scale(0.94); }
+
+/* Earnings bars grow from the baseline on mount (delayed per column). */
+.keke-chart-bar {
+  transform-origin: bottom;
+  animation: mv-bar-grow 0.5s cubic-bezier(0.22, 0.9, 0.24, 1) both;
+}
+.keke-chart-col:nth-child(2) .keke-chart-bar { animation-delay: 0.05s; }
+.keke-chart-col:nth-child(3) .keke-chart-bar { animation-delay: 0.1s; }
+.keke-chart-col:nth-child(4) .keke-chart-bar { animation-delay: 0.15s; }
+.keke-chart-col:nth-child(5) .keke-chart-bar { animation-delay: 0.2s; }
+.keke-chart-col:nth-child(6) .keke-chart-bar { animation-delay: 0.25s; }
+.keke-chart-col:nth-child(7) .keke-chart-bar { animation-delay: 0.3s; }
+
+/* Live tracking dot breathes while the position is actually live (mv-dot
+   keyframes live in motion.css; stops with the global reduced-motion rule). */
+.kr-track.live .kr-track-dot { animation: mv-dot 1.6s ease-in-out infinite; }
+
+/* Trip-screen bottom sheet glides up on mount. */
+.keke-trip-sheet { animation: mv-rise 0.4s var(--mv-spring, cubic-bezier(0.22, 0.9, 0.24, 1)) 0.06s both; }

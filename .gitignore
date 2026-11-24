@@ -7,3 +7,5 @@ dist
 # Self-signed dev certificate for `npm run dev:https` (geolocation needs a
 # secure context on phones) — never committed, never deployed.
 .cert
+.vercel
+.env*

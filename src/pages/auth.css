@@ -1,0 +1,264 @@
+/* Sign-in / sign-up shell (src/pages/Login.jsx + SignUp.jsx) — mockup
+   input spec: white field, 1px #E2E8F0, 8px radius, electric-blue focus
+   with a 3px diffused halo; primary actions in navy #1E3A8A. Scoped to
+   .auth so the global .page/.card screens (forgot/reset, app pages) keep
+   their existing look untouched. */
+
+.auth {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg, #f5f8ff);
+  font-family: Inter, system-ui, sans-serif;
+  color: var(--navy, #1e3a8a);
+}
+
+/* ---------- Brand panel ---------- */
+.auth-brand {
+  display: none;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(160deg, #1e3a8a 0%, #172554 100%);
+  color: #fff;
+  padding: 44px;
+  flex-direction: column;
+  justify-content: space-between;
+}
+/* Faint route-grid texture, pure CSS (no assets). */
+.auth-brand::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse at 30% 20%, #000 20%, transparent 75%);
+}
+.auth-brand > * { position: relative; }
+.auth-brand .lp-logo {
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: none;
+}
+.auth-brand .lp-brand-name { color: #fff; }
+.auth-brand .lp-brand-name em { color: #93c5fd; }
+.auth-tagline {
+  font-size: clamp(26px, 2.4vw, 34px);
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+.auth-tagline span { color: #93c5fd; }
+.auth-brand-points {
+  list-style: none;
+  margin: 26px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.auth-brand-points li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14.5px;
+  font-weight: 500;
+  color: #dbeafe;
+}
+.auth-brand-points svg { color: #93c5fd; flex: none; }
+.auth-brand-foot {
+  font-size: 12.5px;
+  color: #93c5fd;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.auth-brand-foot i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #34d399;
+  display: inline-block;
+}
+
+/* ---------- Form side ---------- */
+.auth-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 18px 36px;
+}
+.auth-card {
+  width: 100%;
+  max-width: 440px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08), 0 2px 6px rgba(15, 23, 42, 0.04);
+  padding: 28px 24px;
+}
+.auth-card-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 22px;
+}
+.auth-card h1 {
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 25px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: var(--navy, #1e3a8a);
+  margin: 0 0 6px;
+}
+.auth-sub {
+  margin: 0 0 22px;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: #64748b;
+}
+.auth-sub b { color: var(--navy, #1e3a8a); font-weight: 600; }
+
+/* Labels + inputs (mockup input field spec). */
+.auth label {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--navy, #1e3a8a);
+  margin: 16px 0 6px;
+  letter-spacing: 0.01em;
+}
+.auth label:first-of-type { margin-top: 0; }
+.auth input {
+  width: 100%;
+  height: 48px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  padding: 0 14px;
+  font-size: 15px;
+  font-family: inherit;
+  color: #0b1c30;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.auth input::placeholder { color: #94a3b8; }
+.auth input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+/* Primary action (overrides the global blue pill button inside .auth). */
+.auth button.auth-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 48px;
+  margin-top: 22px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--navy, #1e3a8a);
+  color: #fff;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 15.5px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.auth button.auth-btn:hover:not(:disabled) {
+  background: #172554;
+  transform: translateY(-1px);
+}
+.auth button.auth-btn:disabled { opacity: 0.6; cursor: default; transform: none; }
+
+/* Note / feedback rows. */
+.auth-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: #eff6ff;
+  border: 1px solid #dbeafe;
+  color: #1e3a8a;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 16px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.auth-note svg { flex: none; margin-top: 1px; color: #2563eb; }
+.auth .error {
+  background: #fee2e2;
+  color: #991b1b;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 16px;
+  font-size: 13.5px;
+}
+.auth .ok {
+  background: #dcfce7;
+  color: #166534;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 16px;
+  font-size: 13.5px;
+}
+
+/* Link rows under the form. */
+.auth-links {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid #f1f5f9;
+  font-size: 14px;
+  color: #64748b;
+  text-align: center;
+}
+.auth-links a {
+  color: #2563eb;
+  font-weight: 600;
+  text-decoration: none;
+}
+.auth-links a:hover { text-decoration: underline; }
+.auth-links .auth-links-row {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.auth-foot {
+  margin: 18px 0 0;
+  font-size: 12px;
+  color: #94a3b8;
+  text-align: center;
+}
+
+@media (min-width: 900px) {
+  .auth {
+    flex-direction: row;
+  }
+  .auth-brand {
+    display: flex;
+    flex: 1 1 46%;
+    padding: 56px;
+  }
+  .auth-main {
+    flex: 1 1 54%;
+    padding: 40px;
+  }
+  .auth-card { padding: 36px 34px; }
+  .auth-card-brand { display: none; } /* brand lives on the panel at desktop */
+}
+
+/* Entrance: card rises, brand panel fades (runs when the panel first
+   becomes visible at ≥900px too — animations start on first render). */
+.auth-card { animation: mv-rise 0.45s var(--mv-spring, cubic-bezier(0.22, 0.9, 0.24, 1)) both; }
+.auth-brand { animation: mv-fade 0.6s ease 0.1s both; }

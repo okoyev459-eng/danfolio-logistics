@@ -380,7 +380,14 @@ export default function StudentHome() {
 
           <div className="sh-panel">
             <h2>Recent rides</h2>
-            {rides === null && <p className="sh-empty">Loading…</p>}
+            {rides === null && (
+              <div className="sh-skel" role="status">
+                <span className="sr-only">Loading your recent rides…</span>
+                <div className="skeleton skeleton-row" />
+                <div className="skeleton skeleton-row" />
+                <div className="skeleton skeleton-row" />
+              </div>
+            )}
             {rides && rides.length === 0 && (
               <p className="sh-empty">No rides yet. Book your first one.</p>
             )}
@@ -406,7 +413,14 @@ export default function StudentHome() {
             {tab === 'Rides' && (
               <>
                 <h2>My rides</h2>
-                {rides === null && <p className="muted">Loading…</p>}
+                {rides === null && (
+                  <div className="sh-skel" role="status">
+                    <span className="sr-only">Loading your rides…</span>
+                    <div className="skeleton skeleton-block" />
+                    <div className="skeleton skeleton-block" />
+                    <div className="skeleton skeleton-block" />
+                  </div>
+                )}
                 {rides && pastRides.length === 0 && (
                   <div className="card muted">No finished rides yet.</div>
                 )}
