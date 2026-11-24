@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from './lib/auth.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
+import RatingPrompt from './components/RatingPrompt.jsx'
 import Landing from './pages/Landing.jsx'
 import Login from './pages/Login.jsx'
 import SignUp from './pages/SignUp.jsx'
@@ -53,35 +54,38 @@ const admin = (el) => <ProtectedRoute roles={['admin']}>{el}</ProtectedRoute>
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<RoleHome />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<SignUp />} />
-      <Route path="/forgot-password" element={<ForgotPassword />} />
-      <Route path="/reset-password" element={<ResetPassword />} />
-      <Route path="/student" element={student(<StudentHome />)} />
-      {/* No mode yet → BookFlow opens on the Drop/Along sheet over its map
-          (mockup artboard 3) instead of a separate choose-type page. */}
-      <Route path="/student/book" element={student(<BookFlow />)} />
-      <Route path="/student/book/drop" element={student(<BookFlow initialMode="drop" />)} />
-      <Route path="/student/book/along" element={student(<BookFlow initialMode="along" />)} />
-      <Route path="/student/ride/:rideId" element={student(<Ride />)} />
-      <Route path="/student/pay/:rideId" element={student(<StudentPayRideRoute />)} />
-      <Route path="/student/ticket/:rideId" element={student(<Ticket />)} />
-      <Route path="/student/verify/:rideId" element={student(<Verify />)} />
-      <Route path="/student/review/:rideId" element={student(<Review />)} />
-      <Route path="/student/report/:rideId" element={student(<Report />)} />
-      <Route path="/keke" element={keke(<KekeHome />)} />
-      <Route path="/admin" element={admin(<AdminHome />)} />
-      <Route path="/admin/register-keke" element={admin(<RegisterKeke />)} />
-      <Route path="/admin/locations" element={admin(<AdminLocations />)} />
-      <Route path="/admin/fares" element={admin(<AdminFares />)} />
-      <Route path="/admin/kekes" element={admin(<AdminKekes />)} />
-      <Route path="/admin/rides" element={admin(<AdminRides />)} />
-      <Route path="/admin/reports" element={admin(<AdminReports />)} />
-      <Route path="/admin/students" element={admin(<AdminStudents />)} />
-      <Route path="/map" element={<ProtectedRoute roles={['student', 'keke', 'admin']}><StationMap /></ProtectedRoute>} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <>
+      <RatingPrompt />
+      <Routes>
+        <Route path="/" element={<RoleHome />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<SignUp />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/student" element={student(<StudentHome />)} />
+        {/* No mode yet → BookFlow opens on the Drop/Along sheet over its map
+            (mockup artboard 3) instead of a separate choose-type page. */}
+        <Route path="/student/book" element={student(<BookFlow />)} />
+        <Route path="/student/book/drop" element={student(<BookFlow initialMode="drop" />)} />
+        <Route path="/student/book/along" element={student(<BookFlow initialMode="along" />)} />
+        <Route path="/student/ride/:rideId" element={student(<Ride />)} />
+        <Route path="/student/pay/:rideId" element={student(<StudentPayRideRoute />)} />
+        <Route path="/student/ticket/:rideId" element={student(<Ticket />)} />
+        <Route path="/student/verify/:rideId" element={student(<Verify />)} />
+        <Route path="/student/review/:rideId" element={student(<Review />)} />
+        <Route path="/student/report/:rideId" element={student(<Report />)} />
+        <Route path="/keke" element={keke(<KekeHome />)} />
+        <Route path="/admin" element={admin(<AdminHome />)} />
+        <Route path="/admin/register-keke" element={admin(<RegisterKeke />)} />
+        <Route path="/admin/locations" element={admin(<AdminLocations />)} />
+        <Route path="/admin/fares" element={admin(<AdminFares />)} />
+        <Route path="/admin/kekes" element={admin(<AdminKekes />)} />
+        <Route path="/admin/rides" element={admin(<AdminRides />)} />
+        <Route path="/admin/reports" element={admin(<AdminReports />)} />
+        <Route path="/admin/students" element={admin(<AdminStudents />)} />
+        <Route path="/map" element={<ProtectedRoute roles={['student', 'keke', 'admin']}><StationMap /></ProtectedRoute>} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
   )
 }

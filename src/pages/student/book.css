@@ -530,6 +530,25 @@
 }
 @keyframes bk-rot { to { transform: rotate(360deg); } }
 
+.bk-booked {
+  text-align: center;
+  padding: 8px 0 4px;
+}
+.bk-install .install-app-btn {
+  width: auto;
+  height: 44px;
+  margin: 0;
+  line-height: 42px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.95);
+  color: #1e3a8a;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.25);
+  font-size: 13px;
+}
+.bk-install .install-app-hint { top: calc(100% + 8px); right: 0; }
+
 /* Full-screen loading veil while locations load on a cold start */
 .bk-loading {
   position: absolute;

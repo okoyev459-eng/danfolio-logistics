@@ -63,7 +63,7 @@ export default function Review() {
 
   async function submit(e) {
     e.preventDefault()
-    if (busy) return
+    if (busy || existing) return
 
     if (rating < 1 || rating > 5) {
       setError('Choose a rating from 1 to 5.')
@@ -87,7 +87,8 @@ export default function Review() {
 
     if (insertError) {
       if (insertError.code === '23505') {
-        setError('You have already reviewed this ride.')
+        setExisting({ id: 'duplicate', rating, comment: comment.trim() || null })
+        setError('A review for this ride already exists. You can only submit one review.')
       } else {
         setError(insertError.message)
       }
@@ -120,7 +121,7 @@ export default function Review() {
 
       {existing && (
         <div className="ok">
-          You already rated this ride {existing.rating}/5. You can update it below.
+          You already rated this ride {existing.rating}/5. Reviews can only be submitted once.
         </div>
       )}
 
@@ -134,7 +135,8 @@ export default function Review() {
               aria-label={`${star} star${star > 1 ? 's' : ''}`}
               aria-pressed={rating === star}
               className={'rv-star' + (star <= rating ? ' on' : '')}
-              onClick={() => setRating(star)}
+              onClick={() => !existing && setRating(star)}
+              disabled={Boolean(existing)}
             >
               ★
             </button>
@@ -151,13 +153,14 @@ export default function Review() {
           rows={3}
           maxLength={500}
           placeholder="How was the ride?"
+          disabled={Boolean(existing)}
           style={{ width: '100%', borderRadius: 14, border: '1px solid #cbd5e1', padding: 12, font: 'inherit' }}
         />
 
-        {error && <div className="error">{error}</div>}
+        {error && <div className="error" role="alert">{error}</div>}
 
-        <button disabled={busy || rating < 1}>
-          {busy ? 'Saving…' : existing ? 'Update review' : 'Submit review'}
+        <button disabled={busy || rating < 1 || Boolean(existing)}>
+          {busy ? 'Saving…' : existing ? 'Review submitted' : 'Submit review'}
         </button>
       </form>
     </Layout>

@@ -1,5 +1,13 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
-import maplibregl from 'maplibre-gl'
+import {
+  AttributionControl,
+  LngLatBounds,
+  Map,
+  Marker,
+  NavigationControl,
+  Popup,
+  ScaleControl,
+} from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { circlePolygon, validCoord } from '../lib/geo'
 import { ROUTE_FALLBACK_NOTE } from '../lib/routing'
@@ -174,10 +182,22 @@ const KIND_COLORS = {
   destination: '#0EA5E9',
 }
 
-const KEKE_SVG =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
-  'stroke-linecap="round" stroke-linejoin="round">' +
-  '<path d="M5 11l1.5-4.2A2 2 0 0 1 8.4 5.5h7.2a2 2 0 0 1 1.9 1.3L19 11M5 11h14M5 11a2 2 0 0 0-2 2v3.5h2M19 11a2 2 0 0 1 2 2v3.5h-2M5 16.5V19m14-2.5V19M7.5 14h.5m8 0h.5"/></svg>'
+function appendKekeSvg(el) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  svg.setAttribute('viewBox', '0 0 24 24')
+  svg.setAttribute('fill', 'none')
+  svg.setAttribute('stroke', 'currentColor')
+  svg.setAttribute('stroke-width', '2')
+  svg.setAttribute('stroke-linecap', 'round')
+  svg.setAttribute('stroke-linejoin', 'round')
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  path.setAttribute(
+    'd',
+    'M5 11l1.5-4.2A2 2 0 0 1 8.4 5.5h7.2a2 2 0 0 1 1.9 1.3L19 11M5 11h14M5 11a2 2 0 0 0-2 2v3.5h2M19 11a2 2 0 0 1 2 2v3.5h-2M5 16.5V19m14-2.5V19M7.5 14h.5m8 0h.5',
+  )
+  svg.appendChild(path)
+  el.appendChild(svg)
+}
 
 // Heartbeat state of one keke row — pure wrapper over tracking.js so every
 // screen (home, booking, ride) classifies live / stale / offline identically.
@@ -222,7 +242,7 @@ function kekePopupHTML(keke, state) {
 function makeKekeElement(highlight, state) {
   const el = document.createElement('div')
   el.className = 'km-keke' + stateClass(state) + (highlight ? ' km-keke-hi' : '')
-  el.innerHTML = KEKE_SVG
+  appendKekeSvg(el)
   return el
 }
 
@@ -335,7 +355,7 @@ const CampusMap = forwardRef(function CampusMap(
   function fitList(list) {
     const map = mapRef.current
     if (!map) return false
-    const bounds = new maplibregl.LngLatBounds()
+    const bounds = new LngLatBounds()
     let ok = false
     for (const p of list ?? []) {
       if (!validCoord(p)) continue
@@ -457,7 +477,7 @@ const CampusMap = forwardRef(function CampusMap(
 
     let map
     try {
-      map = new maplibregl.Map({
+      map = new Map({
         container: containerRef.current,
         style: envStyle(),
         center: FALLBACK_CENTER,
@@ -472,14 +492,14 @@ const CampusMap = forwardRef(function CampusMap(
     }
 
     mapRef.current = map
-    map.addControl(new maplibregl.AttributionControl({
+    map.addControl(new AttributionControl({
       compact: true,
       customAttribution: '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>',
     }))
     if (interactive && navControls) {
-      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
+      map.addControl(new NavigationControl({ showCompass: false }), 'top-right')
     }
-    map.addControl(new maplibregl.ScaleControl({ maxWidth: 100, unit: 'metric' }), 'bottom-left')
+    map.addControl(new ScaleControl({ maxWidth: 100, unit: 'metric' }), 'bottom-left')
 
     // A user gesture must never be overridden by a late camera apply.
     const markInteracted = () => { interactedRef.current = true }
@@ -606,9 +626,9 @@ const CampusMap = forwardRef(function CampusMap(
       let entry = pointMarkersRef.current.get(key)
       if (!entry) {
         const color = KIND_COLORS[point.kind] ?? '#2563EB'
-        const marker = new maplibregl.Marker({ color })
+        const marker = new Marker({ color })
           .setLngLat([Number(point.lng), Number(point.lat)])
-          .setPopup(new maplibregl.Popup().setHTML(`<b>${escapePopupText(point.name ?? 'Point')}</b>`))
+          .setPopup(new Popup().setHTML(`<b>${escapePopupText(point.name ?? 'Point')}</b>`))
           .addTo(map)
 
         if (onSelectRef.current) {
@@ -651,12 +671,12 @@ const CampusMap = forwardRef(function CampusMap(
 
       let entry = kekeMarkersRef.current.get(key)
       if (!entry) {
-        const marker = new maplibregl.Marker({
+        const marker = new Marker({
           element: makeKekeElement(highlight, state),
           anchor: 'center',
         })
           .setLngLat([Number(keke.lng), Number(keke.lat)])
-          .setPopup(new maplibregl.Popup().setHTML(kekePopupHTML(keke, state)))
+          .setPopup(new Popup().setHTML(kekePopupHTML(keke, state)))
           .addTo(map)
         entry = { marker, highlight, state, number: keke.keke_number ?? '' }
         kekeMarkersRef.current.set(key, entry)
@@ -761,7 +781,7 @@ const CampusMap = forwardRef(function CampusMap(
 
     const el = document.createElement('div')
     el.className = 'km-user'
-    userMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'center' })
+    userMarkerRef.current = new Marker({ element: el, anchor: 'center' })
       .setLngLat([Number(userLocation.lng), Number(userLocation.lat)])
       .addTo(map)
 

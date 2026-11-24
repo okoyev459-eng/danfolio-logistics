@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { Brand, Icon } from './Landing.jsx'
 import './landing.css'
 import './auth.css'
+
+const RESEND_COOLDOWN_SECONDS = 60
 
 // Sign-up on the redesigned auth shell (.auth).
 // The matriculation-number field was removed on request. No migration is
@@ -15,9 +17,20 @@ export default function SignUp() {
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
   const [busy, setBusy] = useState(false)
+  const [needsConfirmation, setNeedsConfirmation] = useState(false)
+  const [cooldownUntil, setCooldownUntil] = useState(0)
+  const [now, setNow] = useState(Date.now())
   const navigate = useNavigate()
 
   const set = (key) => (e) => setForm({ ...form, [key]: e.target.value })
+
+  useEffect(() => {
+    if (!cooldownUntil) return undefined
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [cooldownUntil])
+
+  const secondsLeft = Math.max(0, Math.ceil((cooldownUntil - now) / 1000))
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -36,8 +49,36 @@ export default function SignUp() {
     })
     setBusy(false)
     if (error) return setError(error.message)
-    if (data.session) navigate('/')
-    else setInfo('Account created. Check your email to confirm, then sign in.')
+    if (data.session) {
+      navigate('/')
+      return
+    }
+    setNeedsConfirmation(true)
+    setCooldownUntil(Date.now() + RESEND_COOLDOWN_SECONDS * 1000)
+    setInfo('Account created. If email confirmation is enabled, check your email to confirm, then sign in.')
+  }
+
+  async function resendConfirmation() {
+    if (busy || secondsLeft > 0) return
+    setBusy(true)
+    setError('')
+    setInfo('')
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: form.email.trim(),
+    })
+    setBusy(false)
+    if (error) {
+      if (/rate|limit|too many/i.test(error.message || '')) {
+        setError('Too many requests. Please wait before trying again.')
+      } else {
+        setError('Could not resend confirmation email right now. Please try again.')
+      }
+      setCooldownUntil(Date.now() + RESEND_COOLDOWN_SECONDS * 1000)
+      return
+    }
+    setCooldownUntil(Date.now() + RESEND_COOLDOWN_SECONDS * 1000)
+    setInfo('If email confirmation is enabled for your account, a new confirmation email has been sent.')
   }
 
   return (
@@ -118,6 +159,18 @@ export default function SignUp() {
             <button className="auth-btn" disabled={busy}>
               {busy ? 'Creating…' : 'Create account'}
             </button>
+
+            {needsConfirmation && (
+              <button
+                type="button"
+                className="auth-btn"
+                style={{ marginTop: 10, background: '#fff', color: 'var(--navy)', border: '1.5px solid #dbe5f3' }}
+                onClick={resendConfirmation}
+                disabled={busy || secondsLeft > 0 || !form.email.trim()}
+              >
+                {busy ? 'Sending…' : secondsLeft > 0 ? `Resend in ${secondsLeft}s` : 'Resend confirmation email'}
+              </button>
+            )}
 
             <p className="auth-consent">
               By creating an account you agree to our{' '}

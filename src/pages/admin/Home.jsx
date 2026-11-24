@@ -116,11 +116,17 @@ export default function AdminHome() {
   return (
     <AdminLayout title="Overview">
       {error && <div className="error" role="alert">{error}</div>}
-      {!stats && !error && <p className="muted">Loading…</p>}
+      {!stats && !error && (
+        <div aria-hidden="true">
+          <div className="skeleton skeleton-card" />
+          <div className="skeleton skeleton-card" />
+          <div className="skeleton skeleton-card" />
+        </div>
+      )}
 
       {stats && (
-        <>
-          <div className="adm-stats">
+        <div className="app-fade">
+          <div className="adm-stats pop-in">
             <div className="adm-stat">
               <span>Today’s rides</span>
               <strong>{stats.ridesToday}</strong>
@@ -211,7 +217,7 @@ export default function AdminHome() {
               </div>
             </section>
           </div>
-        </>
+        </div>
       )}
     </AdminLayout>
   )

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import CampusMap from '../../components/CampusMap.jsx'
 import BottomSheet from '../../components/BottomSheet.jsx'
+import InstallAppButton from '../../components/InstallAppButton.jsx'
 import { supabase } from '../../lib/supabase'
 import { useGeolocation } from '../../lib/useGeolocation'
 import { distanceMeters, formatDistance, validCoord } from '../../lib/geo'
@@ -46,8 +47,9 @@ const RIDE_SELECT =
 
 const ACTIVE_STATUSES = ['searching', 'accepted', 'paid', 'arrived', 'on_trip']
 
-// Sheet snaps in visibility order: peek (px), mid (fraction), full (fraction).
-const SHEET_SNAPS = [152, 0.46, 0.88]
+// Sheet snaps in visibility order. Fractions keep the map dominant in the
+// collapsed state (>50% visible) while still exposing clear booking controls.
+const SHEET_SNAPS = [0.28, 0.54, 0.88]
 
 // Locations arrive already grouped by the admin's category label; anything
 // without one lands in a visible "Other" group instead of vanishing.
@@ -142,6 +144,7 @@ export default function BookFlow({ initialMode = null }) {
   )
   const [cancelling, setCancelling] = useState(false)
   const [confirmCancel, setConfirmCancel] = useState(false)
+  const [bookedFlash, setBookedFlash] = useState(false)
 
   // Map camera API (zoom / recenter / fit), driven by the FAB controls.
   const mapRef = useRef(null)
@@ -724,6 +727,7 @@ export default function BookFlow({ initialMode = null }) {
           to,
         })
       } else {
+        setBookedFlash(true)
         setActiveRide({
           id: data.ride_id,
           fare: data.fare,
@@ -732,6 +736,7 @@ export default function BookFlow({ initialMode = null }) {
           from,
           to,
         })
+        window.setTimeout(() => setBookedFlash(false), 1400)
       }
       setSheetIndex(1)
       setShowActiveNotice(false)
@@ -1142,6 +1147,14 @@ export default function BookFlow({ initialMode = null }) {
           </div>
         )}
 
+        {bookedFlash && (
+          <div className="bk-booked pop-in" role="status" aria-live="polite">
+            <div className="success-check" aria-hidden="true">✓</div>
+            <p className="bk-step" style={{ margin: 0 }}>Ride requested</p>
+            <p className="bk-sub" style={{ marginBottom: 0 }}>We’re finding an eligible Keke now.</p>
+          </div>
+        )}
+
         {/* Live proximity of the assigned keke — straight-line distance to
             wherever the student is waiting, straight from its heartbeat.
             The state word (nearby / approaching) only appears while the
@@ -1372,7 +1385,7 @@ export default function BookFlow({ initialMode = null }) {
           Danfolio ·{' '}
           {choosingType ? 'Book a ride' : isDrop ? 'Drop' : 'Along'}
         </div>
-        {/* Sign-out lives on the Profile tab only — no scattered ⏻ buttons. */}
+        <InstallAppButton className="bk-install" />
       </div>
 
       {!online && (

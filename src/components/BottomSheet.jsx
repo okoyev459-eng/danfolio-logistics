@@ -122,6 +122,28 @@ export default function BottomSheet({
     settle(nearestSnap(raw, dims.tSnaps, d.velocity))
   }
 
+  function onHeaderKeyDown(e) {
+    if (
+      e.key === 'ArrowUp' ||
+      e.key === 'PageUp' ||
+      e.key === 'Enter' ||
+      e.key === ' ' ||
+      e.key === 'Spacebar'
+    ) {
+      e.preventDefault()
+      settle(Math.min(indexRef.current + 1, dims.tSnaps.length - 1))
+    } else if (e.key === 'ArrowDown' || e.key === 'PageDown') {
+      e.preventDefault()
+      settle(Math.max(indexRef.current - 1, 0))
+    } else if (e.key === 'Home') {
+      e.preventDefault()
+      settle(0)
+    } else if (e.key === 'End') {
+      e.preventDefault()
+      settle(Math.max(0, dims.tSnaps.length - 1))
+    }
+  }
+
   return (
     <div
       ref={sheetRef}
@@ -140,6 +162,11 @@ export default function BottomSheet({
         onPointerMove={pointerMove}
         onPointerUp={pointerUp}
         onPointerCancel={pointerUp}
+        onKeyDown={onHeaderKeyDown}
+        role="button"
+        tabIndex={0}
+        aria-expanded={index > 0}
+        aria-label={`${ariaLabel} panel. ${index === 0 ? 'Collapsed' : index >= dims.tSnaps.length - 1 ? 'Expanded' : 'Partly open'}. Use arrow keys to move.`}
       >
         <div className="bs-handle" aria-hidden="true" />
         {header}
