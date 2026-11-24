@@ -540,6 +540,8 @@ export default function Landing() {
               <a href="#track-ride">Live tracking</a>
               <a href="#two-ways">Ways to ride</a>
               <a href="#about">About DANFOLIO</a>
+              <a href="/terms.html">Terms of Service</a>
+              <a href="/privacy.html">Privacy Policy</a>
               <Link to="/login">Sign in</Link>
               <Link to="/signup">Create account</Link>
             </nav>

@@ -234,6 +234,21 @@
   gap: 18px;
   flex-wrap: wrap;
 }
+/* Consent line under the sign-up action. */
+.auth-consent {
+  margin: 12px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #64748b;
+  text-align: center;
+}
+.auth-consent a {
+  color: #2563eb;
+  font-weight: 600;
+  text-decoration: none;
+}
+.auth-consent a:hover { text-decoration: underline; }
+
 .auth-foot {
   margin: 18px 0 0;
   font-size: 12px;

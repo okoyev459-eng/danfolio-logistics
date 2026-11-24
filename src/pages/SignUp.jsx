@@ -118,6 +118,13 @@ export default function SignUp() {
             <button className="auth-btn" disabled={busy}>
               {busy ? 'Creating…' : 'Create account'}
             </button>
+
+            <p className="auth-consent">
+              By creating an account you agree to our{' '}
+              <a href="/terms.html" target="_blank" rel="noopener noreferrer">Terms of Service</a>
+              {' '}and{' '}
+              <a href="/privacy.html" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
+            </p>
           </form>
 
           <div className="auth-note">
