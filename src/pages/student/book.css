@@ -565,3 +565,51 @@
   }
   .bk-map { position: absolute; inset: 0; }
 }
+
+/* ==========================================================================
+   Motion polish (student booking + ride)
+   Reuses the shared tokens and keyframes from src/motion.css — no new
+   framework, no duplicated keyframes, and everything collapses under the
+   global prefers-reduced-motion rule.
+   ========================================================================== */
+
+/* Booking step → step, and ride-status → ride-status: BookFlow.jsx keys the
+   wrapper on the current stage/status, so this plays once per real change
+   and never on a re-render (fare lookup, GPS tick, realtime text). */
+.bk-stage {
+  animation: bk-stage-in 0.26s var(--mv-spring, cubic-bezier(0.22, 0.9, 0.24, 1)) both;
+}
+@keyframes bk-stage-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Selection feedback: the chosen option eases into its selected colours
+   instead of snapping. */
+.bk-opt {
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+.bk-opt:active { transform: scale(0.99); }
+
+/* Ride screen: the status words fade in when the ride moves to a new state,
+   and the rider card rises in when the assignment lands. */
+.ride-status,
+.ride-status-sub {
+  animation: mv-fade 0.28s ease both;
+}
+.ride-rider {
+  animation: mv-rise 0.32s var(--mv-spring, cubic-bezier(0.22, 0.9, 0.24, 1)) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bk-stage,
+  .ride-status,
+  .ride-status-sub,
+  .ride-rider {
+    animation: none;
+  }
+  .bk-opt {
+    transition: none;
+    animation: none;
+  }
+}

@@ -868,3 +868,9 @@ html.has-js .lp .lp-about-grid .lp-audience:nth-child(2) { transition-delay: 0.0
     gap: 22px;
   }
 }
+
+/* Trust strip: the guarantees tick in one after another, matching the
+   stagger the other grids already use. */
+html.has-js .lp .lp-trust-items .lp-trust-item:nth-child(2) { transition-delay: 0.06s; }
+html.has-js .lp .lp-trust-items .lp-trust-item:nth-child(3) { transition-delay: 0.12s; }
+html.has-js .lp .lp-trust-items .lp-trust-item:nth-child(4) { transition-delay: 0.18s; }
