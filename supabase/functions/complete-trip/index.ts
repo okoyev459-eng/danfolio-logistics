@@ -26,20 +26,20 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
+// A keke carries up to 3 passengers, so finishing one trip only returns the
+// rider to 'online' when it was their LAST active ride — otherwise a rider
+// mid-way through three other bookings would be flipped out of 'on_trip'
+// while still carrying passengers. release_keke_if_idle() decides that
+// server-side (and leaves a rider who went offline mid-trip offline).
 async function releaseRider(
   admin: ReturnType<typeof createClient>,
   kekeId: string | null,
 ): Promise<boolean> {
   if (!kekeId) return true
 
-  const { error } = await admin
-    .from('kekes')
-    .update({
-      status: 'online',
-      last_seen: new Date().toISOString(),
-    })
-    .eq('id', kekeId)
-    .eq('status', 'on_trip')
+  const { error } = await admin.rpc('release_keke_if_idle', {
+    p_keke_id: kekeId,
+  })
 
   if (error) {
     console.error('Could not release rider after completion:', error)

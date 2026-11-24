@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import Layout from '../../components/Layout.jsx'
+import AdminLayout from '../../components/AdminLayout.jsx'
 import { supabase } from '../../lib/supabase'
 
 // Admin fare management (spec section 4: fares are fixed per
@@ -81,67 +80,88 @@ export default function AdminFares() {
   }
 
   return (
-    <Layout title="Admin · Fares">
-      <Link to="/admin">← Dashboard</Link>
-      <h2>Fares</h2>
-      <p className="muted">Fixed prices shown to every student, every time.</p>
+    <AdminLayout title="Fares">
+      <p className="adm-sub">Fixed prices shown to every student, every time.</p>
 
-      <form className="card" onSubmit={save}>
-        <label>Mode</label>
-        <select
-          value={form.mode}
-          onChange={(e) => setForm({ ...form, mode: e.target.value, from_id: '', to_id: '' })}
-          style={{ width: '100%', height: 48, borderRadius: 14, border: '1px solid #cbd5e1', font: 'inherit', padding: '0 12px' }}
-        >
-          <option value="drop">drop</option>
-          <option value="along">along</option>
-        </select>
+      <div className="adm-grid2">
+        <section className="adm-panel">
+          <h2>Configured fares</h2>
+          {fares === null && <p className="muted">Loading…</p>}
+          {fares && fares.length === 0 && (
+            <p className="muted">No fares configured yet.</p>
+          )}
+          {fares && fares.length > 0 && (
+            <div className="adm-table-wrap">
+              <table className="adm-table">
+                <thead>
+                  <tr>
+                    <th>Route</th>
+                    <th>Mode</th>
+                    <th>Fare</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(fares ?? []).map((f) => (
+                    <tr key={f.id}>
+                      <td><b>{f.from?.name} → {f.to?.name}</b></td>
+                      <td>{f.mode}</td>
+                      <td><span className="pill">₦{Number(f.amount).toLocaleString()}</span></td>
+                      <td>
+                        <button
+                          type="button"
+                          className="adm-btn secondary"
+                          disabled={busy}
+                          onClick={() => removeFare(f.id)}
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
 
-        <label>From</label>
-        <select value={form.from_id} onChange={set('from_id')} style={{ width: '100%', height: 48, borderRadius: 14, border: '1px solid #cbd5e1', font: 'inherit', padding: '0 12px' }}>
-          <option value="">Choose…</option>
-          {froms.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-        </select>
-
-        <label>To (destination)</label>
-        <select value={form.to_id} onChange={set('to_id')} style={{ width: '100%', height: 48, borderRadius: 14, border: '1px solid #cbd5e1', font: 'inherit', padding: '0 12px' }}>
-          <option value="">Choose…</option>
-          {tos.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-        </select>
-
-        <label>Fare (₦, whole naira)</label>
-        <input value={form.amount} onChange={set('amount')} inputMode="numeric" required />
-
-        {error && <div className="error">{error}</div>}
-        {notice && <div className="ok">{notice}</div>}
-
-        <button disabled={busy}>{busy ? 'Saving…' : 'Save fare'}</button>
-      </form>
-
-      {fares === null && <p className="muted">Loading…</p>}
-      {(fares ?? []).map((f) => (
-        <div className="card row" key={f.id}>
-          <span>
-            <b>{f.from?.name} → {f.to?.name}</b>
-            <br />
-            <span className="muted">{f.mode}</span>
-          </span>
-          <span style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <span className="badge">₦{f.amount}</span>
-            <button
-              type="button"
-              className="secondary"
-              style={{ marginTop: 0, width: 'auto', padding: '0 12px', height: 36, lineHeight: '36px', fontSize: 13 }}
-              onClick={() => removeFare(f.id)}
+        <section className="adm-panel">
+          <h2>Add or update a fare</h2>
+          <form onSubmit={save}>
+            <label>Mode</label>
+            <select
+              className="adm-select"
+              value={form.mode}
+              onChange={(e) => setForm({ ...form, mode: e.target.value, from_id: '', to_id: '' })}
             >
-              Delete
+              <option value="drop">drop</option>
+              <option value="along">along</option>
+            </select>
+
+            <label>From</label>
+            <select className="adm-select" value={form.from_id} onChange={set('from_id')}>
+              <option value="">Choose…</option>
+              {froms.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+
+            <label>To (destination)</label>
+            <select className="adm-select" value={form.to_id} onChange={set('to_id')}>
+              <option value="">Choose…</option>
+              {tos.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+
+            <label>Fare (₦, whole naira)</label>
+            <input value={form.amount} onChange={set('amount')} inputMode="numeric" required />
+
+            {error && <div className="error">{error}</div>}
+            {notice && <div className="ok">{notice}</div>}
+
+            <button className="adm-btn" style={{ height: 44, lineHeight: '42px', marginTop: 12 }} disabled={busy}>
+              {busy ? 'Saving…' : 'Save fare'}
             </button>
-          </span>
-        </div>
-      ))}
-      {fares !== null && fares.length === 0 && (
-        <div className="card muted">No fares configured yet.</div>
-      )}
-    </Layout>
+          </form>
+        </section>
+      </div>
+    </AdminLayout>
   )
 }

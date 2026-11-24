@@ -8,44 +8,65 @@
 }
 .keke-hero {
   min-height: 260px;
-  background: #243f8d;
+  background: #1e3a8a;
   color: #fff;
   padding: 48px 24px 28px;
 }
 .keke-hero-top { display: flex; align-items: center; gap: 18px; }
 .keke-online-toggle {
-  flex: 0 0 78px;
-  width: 78px;
-  height: 48px;
+  flex: 0 0 72px;
+  width: 72px;
+  height: 40px;
   padding: 5px;
   margin: 0;
   border: 0;
-  border-radius: 30px;
-  background: #6478ad;
+  border-radius: 20px;
+  background: #64748b;
   display: flex;
   align-items: center;
   line-height: 1;
 }
 .keke-online-toggle span {
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   background: #fff;
   display: block;
   transition: transform .18s ease;
 }
-.keke-online-toggle.is-online { background: #2586d9; }
-.keke-online-toggle.is-online span { transform: translateX(30px); }
+.keke-online-toggle.is-online { background: #38bdf8; }
+.keke-online-toggle.is-online span { transform: translateX(32px); }
+/* Notification opt-in bell (hero top-right). 40×40 circle — above the
+   44 px-ish tap comfort band with its hit area padding, still legible.
+   Overrides the global full-width button rule. */
+.keke-notif-bell {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  margin: 0 0 0 auto;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.16s ease, transform 0.16s ease;
+}
+.keke-notif-bell:hover { background: rgba(255, 255, 255, 0.22); }
+.keke-notif-bell:active { transform: scale(0.94); }
+.keke-notif-bell.is-on { background: #16a34a; border-color: #16a34a; }
 .keke-brand span { font-size: 14px; font-weight: 600; }
 .keke-brand h1 { font-size: 23px; line-height: 1.2; margin: 2px 0 0; color: #fff; }
 .keke-earnings-today { display: flex; flex-direction: column; gap: 3px; margin-top: 18px; }
 .keke-earnings-today span { font-size: 14px; font-weight: 600; }
-.keke-earnings-today strong { font-family: Georgia, 'Times New Roman', serif; font-size: 44px; line-height: 1.05; color: #c6dcff; letter-spacing: -1px; }
+.keke-earnings-today strong { font-family: Poppins, Inter, sans-serif; font-weight: 700; font-size: 44px; line-height: 1.05; color: #bfdbfe; letter-spacing: -1px; }
 .keke-content { width: 100%; max-width: 720px; margin: 0 auto; padding: 30px 20px 24px; flex: 1; }
-.keke-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.keke-stat { min-height: 84px; background: #fff; border-radius: 22px; display: flex; flex-direction: column; justify-content: center; align-items: center; box-shadow: 0 5px 20px rgba(35, 62, 130, .04); }
-.keke-stat span { font-size: 14px; }
-.keke-stat strong { font-family: Georgia, 'Times New Roman', serif; font-size: 27px; line-height: 1.15; }
+.keke-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+.keke-stat { min-height: 84px; background: #fff; border-radius: 20px; display: flex; flex-direction: column; justify-content: center; align-items: center; box-shadow: 0 5px 20px rgba(30, 58, 138, .08); gap: 2px; }
+.keke-stat span { font-size: 13px; color: #64748b; }
+.keke-stat strong { font-family: Poppins, Inter, sans-serif; font-weight: 700; font-size: 24px; line-height: 1.15; color: #1e3a8a; }
 .keke-hint { margin-top: 46px; background: #dceaff; border-radius: 20px; padding: 17px 16px 15px; display: flex; flex-direction: column; gap: 2px; color: #21418e; }
 .keke-hint span { font-size: 14px; }
 .keke-hint strong { font-size: 17px; line-height: 1.25; }
@@ -58,6 +79,496 @@
 .keke-tab-placeholder h2 { font-size: 24px; }
 .keke-tab-placeholder p { color: #657392; line-height: 1.5; }
 .keke-signout { max-width: 220px; }
+/* Secondary "Clear code" action — never a solid primary blue */
+.keke-signout.ghost { background: #fff; border: 2px solid #c7d5f5; color: #1e3a8a; line-height: 52px; }
+/* Trip screens: anchor the floating back button inside the app frame */
+.keke-trip-app { position: relative; }
+/* Trip-card hint lines stack instead of running together */
+.keke-hint > span > strong, .keke-hint > span > span { display: block; }
+
+/* ---- Mockup K2: stat cards sit on the light background below the hero --- */
+.keke-stats-wrap {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 18px 20px 0;
+}
+.keke-stats.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+/* ---- Trip screens (K6 / K8): full-screen map + bottom sheet ------------ */
+.keke-trip-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: #e2e8f0;
+  z-index: 40;
+}
+.keke-trip-map {
+  position: absolute;
+  inset: 0;
+}
+.keke-trip-map .campus-map,
+.keke-trip-map > div {
+  height: 100% !important;
+  border-radius: 0 !important;
+}
+.keke-trip-pill {
+  position: absolute;
+  top: calc(16px + env(safe-area-inset-top));
+  left: 16px;
+  z-index: 30;
+  background: #fff;
+  color: #1e3a8a;
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.18);
+}
+.keke-trip-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  background: #fff;
+  border-radius: 28px 28px 0 0;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.08);
+  padding: 20px 24px calc(22px + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  max-height: 70vh;
+}
+
+.kr-student-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.kr-student-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.kr-student-text strong {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e3a8a;
+}
+.kr-student-text span {
+  font-size: 13px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kr-fare-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.kr-fare-row span {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  opacity: 0.65;
+}
+.kr-fare-row strong {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e3a8a;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.kr-fare-row b {
+  font-family: Poppins, Inter, sans-serif;
+  font-size: 28px;
+  font-weight: 700;
+  color: #1e3a8a;
+  line-height: 1.1;
+}
+
+.kr-paid-note {
+  font-size: 13px;
+  color: #16a34a;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+
+.kr-call {
+  display: block;
+  text-align: center;
+  height: 52px;
+  line-height: 52px;
+  border-radius: 20px;
+  border: 2px solid #e2e8f0;
+  color: #1e3a8a;
+  font-family: Poppins, Inter, sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  text-decoration: none;
+  margin-bottom: 10px;
+}
+
+.kr-progress-note {
+  font-size: 13px;
+  color: #64748b;
+  margin: -8px 0 12px;
+}
+
+/* ---- Live-location status chip (spec 6/10): what the rider's device is
+   actually doing — real permission/publish states, never a fake light.
+   Tones: live (green) · wait (amber) · bad (red) · flat (grey). */
+.kr-track {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 9px 12px;
+  margin: 10px 0 4px;
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.35;
+}
+.kr-track-dot {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #94a3b8;
+}
+.kr-track.live .kr-track-dot { background: #16a34a; box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.15); }
+.kr-track.wait .kr-track-dot { background: #d97706; box-shadow: 0 0 0 4px rgba(217, 119, 6, 0.15); }
+.kr-track.bad .kr-track-dot { background: #dc2626; box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.14); }
+.kr-track.live { color: #15803d; border-color: #bbf7d0; background: #f0fdf4; }
+.kr-track.wait { color: #92400e; border-color: #fde68a; background: #fffbeb; }
+.kr-track.bad { color: #991b1b; border-color: #fecaca; background: #fef2f2; }
+.kr-track button {
+  margin-left: auto;
+  flex: 0 0 auto;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  border-radius: 10px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* ---- Trip queue (rider carries up to 3 rides at once, MAX_ACTIVE_RIDES) --- */
+.kr-trip-card {
+  background: #fff;
+  border: 2px solid #e2e8f0;
+  border-radius: 20px;
+  padding: 14px;
+  margin-bottom: 12px;
+  box-shadow: 0 6px 18px rgba(28, 51, 106, 0.06);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  animation: kr-trip-in 0.3s cubic-bezier(0.22, 0.9, 0.24, 1) both;
+}
+.kr-trip-card.kr-trip-sel {
+  border-color: #2865f5;
+  box-shadow: 0 8px 22px rgba(40, 101, 245, 0.16);
+}
+.kr-trip-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  /* The global `button` rule forces height: 56px — a3+ line card head
+     (badge row + route + booking + status hint) overflowed that box and
+     painted straight over the "Call student" button below on phones.
+     Height must hug the content. */
+  height: auto;
+  background: transparent;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.kr-trip-head > span:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.kr-trip-head strong {
+  font-family: Poppins, Inter, sans-serif;
+  font-size: 15px;
+  color: #1e3a8a;
+}
+.kr-trip-head span span {
+  font-size: 13px;
+  color: #64748b;
+}
+.kr-trip-tag {
+  flex: 0 0 auto;
+  background: #eff6ff;
+  color: #1e3a8a;
+  border-radius: 10px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+.kr-trip-card .kr-call { margin-top: 10px; }
+.kr-trip-card .ko-accept { margin-top: 8px; }
+.kr-trip-card .ko-code { margin-top: 8px; }
+
+@keyframes kr-trip-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kr-trip-card { animation: none; transition: none; }
+}
+
+
+/* ---- Trip screen (K7): navy header + avatar --------------------------- */
+.keke-trip-app {
+  padding-bottom: 0;
+}
+.keke-trip-head {
+  background: #1e3a8a;
+  color: #fff;
+  text-align: center;
+  padding: 44px 24px 26px;
+}
+.keke-trip-head h1 {
+  font-family: Poppins, Inter, sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  margin: 12px 0 2px;
+  color: #fff;
+}
+.keke-trip-head p {
+  font-size: 14px;
+  opacity: 0.85;
+  margin: 0;
+}
+.keke-trip-app .keke-trip-sheet {
+  position: static;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  max-height: none;
+  padding: 24px 20px 32px;
+}
+
+.kr-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: Poppins, Inter, sans-serif;
+  font-size: 30px;
+  font-weight: 700;
+  margin: 0 auto;
+  border: 3px solid rgba(255, 255, 255, 0.35);
+}
+.kr-avatar.sm {
+  width: 48px;
+  height: 48px;
+  font-size: 20px;
+  margin: 0;
+  border: 0;
+  background: #dbeafe;
+  color: #1e3a8a;
+}
+
+/* ---- K10 Earnings: period chips + 7-day bar chart --------------------- */
+.keke-period {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+.keke-period button {
+  flex: 0 0 auto;
+  width: auto;
+  height: 40px;
+  line-height: 36px;
+  margin: 0;
+  padding: 0 16px;
+  border-radius: 20px;
+  border: 2px solid #e2e8f0;
+  background: #fff;
+  color: #1e3a8a;
+  font-size: 14px;
+  font-weight: 600;
+}
+.keke-period button.active {
+  background: #dbeafe;
+  border-color: #2563eb;
+}
+
+.keke-chart {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+  background: #fff;
+  border-radius: 20px;
+  padding: 16px 14px 10px;
+  margin-bottom: 14px;
+  box-shadow: 0 5px 20px rgba(30, 58, 138, 0.06);
+}
+.keke-chart-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.keke-chart-track {
+  width: 100%;
+  height: 96px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.keke-chart-bar {
+  width: 70%;
+  max-width: 26px;
+  border-radius: 6px 6px 3px 3px;
+  background: #2563eb;
+  transition: height 0.4s ease;
+}
+.keke-chart-col span {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+/* ---- K11 Profile: navy header block ----------------------------------- */
+.keke-profile-head {
+  background: #1e3a8a;
+  color: #fff;
+  border-radius: 24px;
+  text-align: center;
+  padding: 28px 24px 24px;
+  margin-bottom: 16px;
+}
+.keke-profile-head h1 {
+  font-family: Poppins, Inter, sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  margin: 12px 0 2px;
+}
+.keke-profile-head p {
+  font-size: 13px;
+  opacity: 0.85;
+  margin: 0;
+}
+
+/* ---- Back navigation -------------------------------------------------- */
+/* Trip-card header (back destination from the full-screen trip views) */
+.keke-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 20px 20px 0;
+}
+.keke-bar-title {
+  font-family: Poppins, Inter, sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e3a8a;
+}
+.keke-bar-btn {
+  display: inline-block;
+  width: auto;
+  height: 40px;
+  line-height: 38px;
+  margin: 0;
+  padding: 0 16px;
+  border-radius: 20px;
+  border: 2px solid #2563eb;
+  background: #fff;
+  color: #1e3a8a;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* Round white back buttons (mockup pill language) */
+.keke-back,
+.keke-back-float {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #1e3a8a;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 44px;
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.22);
+}
+.keke-trip-top {
+  position: absolute;
+  top: calc(16px + env(safe-area-inset-top));
+  left: 16px;
+  right: 16px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.keke-trip-top .keke-trip-pill {
+  position: static;
+}
+.keke-back-float {
+  position: absolute;
+  top: calc(16px + env(safe-area-inset-top));
+  left: 16px;
+  z-index: 35;
+}
+
+/* "← Home" link on the tab screens */
+.keke-tab-back {
+  display: inline-block;
+  width: auto;
+  height: auto;
+  margin: 0 0 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #1e3a8a;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+}
 @media (min-width: 760px) {
   .keke-app { max-width: 480px; margin: 0 auto; box-shadow: 0 0 45px rgba(30, 55, 110, .1); }
   .keke-bottom-nav { left: 50%; right: auto; width: min(480px, 100%); transform: translateX(-50%); }
@@ -67,4 +578,317 @@
   .keke-brand h1 { font-size: 21px; }
   .keke-stats { gap: 8px; }
   .keke-stat { border-radius: 17px; }
+  .keke-stat strong { font-size: 20px; }
+  .keke-earnings-today strong { font-size: 36px; }
 }
+
+/* ==========================================================================
+   Task 4 — smartphone-first fixes (narrow mobile must never overflow)
+   ========================================================================== */
+
+/* Full-height layouts follow the ACTUAL browser chrome (dvh), with 100vh as
+   the fallback for engines without dvh. */
+.keke-app { min-height: 100vh; min-height: 100dvh; }
+.keke-trip-screen { height: 100vh; height: 100dvh; }
+
+/* Every child of the app frame is content-box safe: nothing can paint past
+   the phone's width (the cause of sideways scrolling on narrow screens). */
+.keke-app,
+.keke-content,
+.keke-hero,
+.keke-bar,
+.keke-trip-sheet {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Long location names must wrap, not push the layout wider than the screen. */
+.keke-trip-head p,
+.kr-trip-head strong,
+.kr-fare-row strong,
+.keke-hint strong,
+.keke-hint span {
+  overflow-wrap: anywhere;
+}
+
+/* --- Tracking chip (the screenshot bug): the row could not wrap, so the
+   Retry button overflowed the card on narrow screens. Now it wraps, the
+   message shrinks, and Retry keeps a 44px touch target. --- */
+.kr-track {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.kr-track > span:not(.kr-track-dot) {
+  flex: 1 1 160px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.kr-track button {
+  width: auto;
+  min-width: 88px;
+  min-height: 44px;
+  margin-top: 0;
+  line-height: 1.2;
+  padding: 8px 16px;
+  font-size: 13px;
+  order: 2;
+}
+/* The message keeps the first line, the button its own row when cramped. */
+.kr-track > span:not(.kr-track-dot) { order: 1; }
+.kr-track-dot { order: 0; }
+
+/* Ticket card: 3 columns squeeze on a phone — let them wrap. */
+.kr-ticket {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.kr-ticket > div {
+  flex: 1 1 30%;
+  min-width: 0;
+}
+.kr-ticket strong { overflow-wrap: anywhere; }
+
+/* Code boxes: clamp so 4 boxes + gaps always fit the narrowest phone
+   (4 × 46px + 3 × 10px = 214px fits a 320px viewport with padding). */
+.ko-code-boxes { gap: clamp(6px, 2.5vw, 10px); }
+.ko-code-boxes span {
+  width: clamp(46px, 17vw, 56px);
+  height: clamp(54px, 19vw, 64px);
+  font-size: clamp(22px, 8vw, 28px);
+}
+
+/* Stat cards: numbers shrink on the narrowest screens instead of wrapping. */
+.keke-stat strong { font-size: clamp(19px, 6vw, 24px); }
+.keke-stat span { font-size: clamp(11px, 3.4vw, 13px); }
+
+/* All form controls and custom buttons honour the 16px floor so iOS never
+   zooms the page on focus, and every interactive target is ≥44px. */
+.keke-app select,
+.keke-app input,
+.keke-trip-sheet input,
+.keke-trip-sheet select { font-size: 16px; }
+
+.keke-bottom-nav button,
+.keke-tab-back,
+.keke-bar-btn,
+.keke-period button,
+.kr-call,
+.kr-incident-btn {
+  min-height: 44px;
+}
+
+/* Header row can wrap on narrow screens (long keke status + toggle). */
+.keke-hero-top { flex-wrap: wrap; min-width: 0; }
+.keke-brand { min-width: 0; }
+
+/* ==========================================================================
+   Task 3 — unmistakable DROP / ALONG badges (presentation only)
+   ========================================================================== */
+.ko-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 14px;
+  border-radius: 999px;
+  font-family: Poppins, Inter, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.ko-mode-badge.is-drop {
+  background: #1e3a8a;
+  color: #fff;
+  border: 2px solid #1e3a8a;
+}
+.ko-mode-badge.is-along {
+  background: #fff;
+  color: #1e3a8a;
+  border: 2px dashed #2563eb;
+}
+.ko-mode-badge.sm {
+  font-size: 11px;
+  padding: 3px 10px;
+  letter-spacing: 0.8px;
+}
+/* Badge inside the navy header bands reads on dark. */
+.ko-head .ko-mode-badge.is-drop {
+  background: #fff;
+  color: #1e3a8a;
+  border-color: #fff;
+}
+.ko-head .ko-mode-badge.is-along {
+  background: transparent;
+  color: #dbeafe;
+  border-color: #93c5fd;
+}
+.keke-trip-head .ko-mode-badge { margin: 8px auto 0; }
+.kr-mode-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+/* Offer modal additions: route direction arrow, seat counter, mode subtext */
+.ko-route { position: relative; }
+.ko-route-arrow {
+  align-self: center;
+  font-size: 18px;
+  font-weight: 700;
+  color: #2563eb;
+  line-height: 1;
+}
+.ko-mode-sub {
+  font-size: 13px;
+  line-height: 1.45;
+  opacity: 0.85;
+  margin: 6px 0 0;
+}
+.ko-head .ko-mode-badge { margin-bottom: 8px; }
+.ko-seats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: #eff6ff;
+  border: 1px solid #dbeafe;
+  border-radius: 16px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+}
+.ko-seats span { font-size: 14px; font-weight: 600; color: #3b5bab; }
+.ko-seats strong { font-size: 15px; font-weight: 700; color: #1e3a8a; }
+
+/* ==========================================================================
+   Task 1 UI — interruption banner + rider incident controls
+   ========================================================================== */
+.kr-interrupted {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-left: 4px solid #ea580c;
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.kr-interrupted strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: #9a3412;
+  text-transform: capitalize;
+}
+.kr-interrupted span {
+  font-size: 13px;
+  line-height: 1.45;
+  color: #7c2d12;
+}
+
+/* Incident controls sit visually apart from the primary action, with a
+   label, so a rider moving in a bumpy keke cannot mis-tap them. */
+.kr-incident {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed #cbd5e1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.kr-incident-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #64748b;
+}
+.kr-incident-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.kr-incident-btn {
+  flex: 1 1 140px;
+  width: auto;
+  min-height: 48px;
+  margin-top: 0;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 2px solid #cbd5e1;
+  background: #fff;
+  color: #334155;
+  font-family: Poppins, Inter, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+  cursor: pointer;
+}
+.kr-incident-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.kr-incident-btn.warn {
+  background: #fffbeb;
+  border-color: #fcd34d;
+  color: #92400e;
+}
+.kr-incident-btn.danger {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+
+/* ==========================================================================
+   Motion polish (pairs with the global motion.css layer)
+   ========================================================================== */
+
+/* Home entrance choreography — one-shot on mount (React re-renders never
+   restart these; the DOM node must be replaced). */
+.keke-hero-top { animation: mv-rise 0.45s var(--mv-spring, cubic-bezier(0.22, 0.9, 0.24, 1)) both; }
+.keke-earnings-today { animation: mv-rise 0.45s var(--mv-spring, cubic-bezier(0.22, 0.9, 0.24, 1)) 0.08s both; }
+.keke-stats .keke-stat { animation: mv-rise 0.45s var(--mv-spring, cubic-bezier(0.22, 0.9, 0.24, 1)) both; }
+.keke-stats .keke-stat:nth-child(2) { animation-delay: 0.07s; }
+.keke-stats .keke-stat:nth-child(3) { animation-delay: 0.14s; }
+.keke-hint { animation: mv-rise 0.45s var(--mv-spring, cubic-bezier(0.22, 0.9, 0.24, 1)) 0.16s both; }
+.keke-content > h2 { animation: mv-rise 0.45s var(--mv-spring, cubic-bezier(0.22, 0.9, 0.24, 1)) 0.2s both; }
+.keke-tab-placeholder > * { animation: mv-fade 0.3s ease both; }
+.keke-tab-placeholder > *:nth-child(2) { animation-delay: 0.05s; }
+.keke-tab-placeholder > *:nth-child(3) { animation-delay: 0.1s; }
+.keke-bottom-nav { animation: mv-slide-up 0.4s var(--mv-spring, cubic-bezier(0.22, 0.9, 0.24, 1)) 0.1s both; }
+
+/* Bottom-nav active indicator (absolute — never changes nav height). */
+.keke-bottom-nav button { position: relative; }
+.keke-bottom-nav button::after {
+  content: '';
+  position: absolute;
+  left: 24%;
+  right: 24%;
+  bottom: 6px;
+  height: 3px;
+  border-radius: 2px;
+  background: #2865f5;
+  transform: scaleX(0);
+  transition: transform 0.28s cubic-bezier(0.22, 0.9, 0.24, 1);
+}
+.keke-bottom-nav button.active::after { transform: scaleX(1); }
+.keke-bottom-nav button:active { transform: scale(0.94); }
+
+/* Earnings bars grow from the baseline on mount (delayed per column). */
+.keke-chart-bar {
+  transform-origin: bottom;
+  animation: mv-bar-grow 0.5s cubic-bezier(0.22, 0.9, 0.24, 1) both;
+}
+.keke-chart-col:nth-child(2) .keke-chart-bar { animation-delay: 0.05s; }
+.keke-chart-col:nth-child(3) .keke-chart-bar { animation-delay: 0.1s; }
+.keke-chart-col:nth-child(4) .keke-chart-bar { animation-delay: 0.15s; }
+.keke-chart-col:nth-child(5) .keke-chart-bar { animation-delay: 0.2s; }
+.keke-chart-col:nth-child(6) .keke-chart-bar { animation-delay: 0.25s; }
+.keke-chart-col:nth-child(7) .keke-chart-bar { animation-delay: 0.3s; }
+
+/* Live tracking dot breathes while the position is actually live (mv-dot
+   keyframes live in motion.css; stops with the global reduced-motion rule). */
+.kr-track.live .kr-track-dot { animation: mv-dot 1.6s ease-in-out infinite; }
+
+/* Trip-screen bottom sheet glides up on mount. */
+.keke-trip-sheet { animation: mv-rise 0.4s var(--mv-spring, cubic-bezier(0.22, 0.9, 0.24, 1)) 0.06s both; }

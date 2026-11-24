@@ -1,0 +1,403 @@
+/* Student home — the Bolt-style map-first screen from mockup artboard
+   "2 Home": a map band across the top MAJORITY of the screen (>55% of the
+   phone's height, per the completion brief), a scrollable dock (greeting,
+   quick chips, recent rides, Book a ride) filling the remaining space above
+   the bottom nav, and a floating glass brand bar over the map.
+   Rides / Profile open as a sheet over the whole screen so the nav never
+   loses its anchor. */
+
+.sh {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #e2e8f0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Map band — more than 55% of the screen height on a phone (58vh),
+   clamped so it never becomes unusable on very short/tall phones. */
+.sh-map {
+  position: relative;
+  /* Task 7: the map must occupy MORE than 55% of the phone's screen
+     height (58vh with headroom), while never exceeding 900px on desktop.
+     The booking controls scroll below it. */
+  flex: 0 0 clamp(260px, 58vh, 900px);
+}
+.sh-map .campus-map,
+.sh-map > div:not(.sh-gps) {
+  height: 100% !important;
+  border-radius: 0 !important;
+}
+/* Attribution stays inside the map band — the dock no longer overlaps it. */
+.sh-map .maplibregl-ctrl-bottom-right {
+  bottom: 4px;
+  right: 4px;
+}
+
+/* Honest GPS-state chip over the map band (denied / unavailable fix). */
+.sh-gps {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  z-index: 20;
+  max-width: calc(100% - 96px);
+  background: rgba(255, 255, 255, 0.95);
+  color: #475569;
+  border-radius: 12px;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.35;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.18);
+  pointer-events: none;
+}
+
+/* ---- Floating glass brand bar (mockup pill language: white r20) ---- */
+.sh-top {
+  position: absolute;
+  top: calc(10px + env(safe-area-inset-top));
+  left: 12px;
+  right: 12px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: none;
+}
+.sh-top > * { pointer-events: auto; }
+
+.sh-brand {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 20px;
+  padding: 10px 18px;
+  font-family: Poppins, system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  color: #1e3a8a;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.25);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sh-icon {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #1e3a8a;
+  font-size: 17px;
+  line-height: 44px;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.25);
+}
+
+/* ---- Dock: everything the student taps, filling the ⅔ under the map ---- */
+.sh-dock {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  z-index: 25;
+  background: var(--bg, #f5f8ff);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 12px calc(84px + env(safe-area-inset-bottom));
+  scrollbar-width: thin;
+}
+
+.sh-greet {
+  background: #fff;
+  border-radius: 20px;
+  padding: 16px 18px;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.16);
+}
+.sh-greet h1 {
+  font-family: Poppins, system-ui, sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+  color: #1e3a8a;
+}
+.sh-greet p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+/* Quick destinations (mockup pills: white, fully rounded, navy text).
+   These are real rows from `locations`, not hardcoded places. One row that
+   wraps; tapping one still opens the Drop flow with that destination. */
+.sh-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.sh-chip {
+  /* Overrides of the global full-width button rule, so these stay small
+     pills instead of full-width cards. */
+  width: auto;
+  height: auto;
+  margin-top: 0;
+  line-height: 1.4;
+  /* Mockup pill spec: white bg, radius 20, 9/14 padding, 14px/500 navy,
+     soft shadow. */
+  border: 0;
+  background: #fff;
+  color: #1e3a8a;
+  border-radius: 20px;
+  padding: 9px 14px;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  transition: transform 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+.sh-chip:hover { background: #dbeafe; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
+.sh-chip:active { transform: scale(0.95); }
+
+/* Primary action — mockup's floating "Book a ride". */
+.sh-book {
+  width: 100%;
+  height: 54px;
+  border: 0;
+  border-radius: 18px;
+  background: #2563eb;
+  color: #fff;
+  font-family: Poppins, system-ui, sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 12px 26px rgba(37, 99, 235, 0.36);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+.sh-book:hover { box-shadow: 0 14px 30px rgba(37, 99, 235, 0.44); }
+.sh-book:active { transform: translateY(1px) scale(0.99); }
+
+/* Active-ride banner — always one tap from the live ride screen. */
+.sh-active {
+  display: block;
+  background: #1e3a8a;
+  color: #fff;
+  border-radius: 20px;
+  padding: 14px 16px;
+  text-decoration: none;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.28);
+  transition: transform 0.16s ease;
+}
+.sh-active:active { transform: scale(0.99); }
+.sh-active b { display: block; font-size: 15px; margin-top: 4px; }
+.sh-active span { font-size: 13px; opacity: 0.8; }
+
+.sh-panel {
+  background: #fff;
+  border-radius: 20px;
+  padding: 4px;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.14);
+}
+.sh-panel h2 {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  opacity: 0.55;
+  margin: 12px 14px 6px;
+}
+.sh-recent-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  background: transparent;
+  border-radius: 14px;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.sh-recent-row:hover { background: #f1f5f9; }
+.sh-recent-row b { display: block; font-size: 14px; color: #1e3a8a; }
+.sh-recent-row small { font-size: 12px; opacity: 0.65; }
+
+/* Compact "Ticket" button in the Rides list (spec §1: a real button, not
+   a text link — sized for a row of actions, not the full-width .btn). */
+.sh-mini-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 11px;
+  background: var(--blue);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  margin-top: 0;
+}
+.sh-empty { padding: 14px; font-size: 14px; opacity: 0.7; }
+
+/* ---- Bottom nav (mockup: Home / Rides / Profile) ---- */
+.sh-nav {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 45;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  background: #fff;
+  box-shadow: 0 -4px 18px rgba(15, 23, 42, 0.1);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.sh-nav button {
+  background: transparent;
+  border: 0;
+  margin: 0;
+  padding: 14px 4px;
+  height: auto;
+  line-height: 1.2;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e3a8a;
+  opacity: 0.55;
+  cursor: pointer;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+.sh-nav button.active { color: #2563eb; opacity: 1; font-weight: 700; }
+
+/* ---- Rides / Profile: a page sheet that slides over the map ---- */
+.sh-page {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  background: var(--bg, #f8fafc);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  animation: sh-sheet-in 0.28s cubic-bezier(0.22, 0.9, 0.24, 1) both;
+}
+@keyframes sh-sheet-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---- Motion: gentle, one-shot, and disabled for reduced-motion users ---- */
+.sh-greet,
+.sh-chips,
+.sh-book,
+.sh-active,
+.sh-panel {
+  animation: sh-rise 0.42s cubic-bezier(0.22, 0.9, 0.24, 1) both;
+}
+.sh-chips { animation-delay: 0.05s; }
+.sh-book { animation-delay: 0.1s; }
+.sh-panel { animation-delay: 0.15s; }
+
+@keyframes sh-rise {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sh-greet, .sh-chips, .sh-book, .sh-active, .sh-panel, .sh-page {
+    animation: none;
+  }
+  .sh-chip, .sh-book, .sh-active { transition: none; }
+}
+
+@media (min-width: 720px) {
+  /* Keep the whole app phone-like on desktop, like the booking screen. */
+  .sh {
+    position: relative;
+    inset: auto;
+    min-height: 100vh;
+    max-width: 560px;
+    margin: 0 auto;
+    box-shadow: 0 0 60px rgba(15, 23, 42, 0.18);
+  }
+}
+
+/* ==========================================================================
+   Motion polish (pairs with the global motion.css layer)
+   ========================================================================== */
+
+/* Bottom-nav active indicator: a pill that scales in under the active tab
+   (position:absolute so it never changes the nav's height). */
+.sh-nav button { position: relative; }
+.sh-nav button::after {
+  content: '';
+  position: absolute;
+  left: 26%;
+  right: 26%;
+  bottom: 6px;
+  height: 3px;
+  border-radius: 2px;
+  background: #2563eb;
+  transform: scaleX(0);
+  transition: transform 0.28s cubic-bezier(0.22, 0.9, 0.24, 1);
+}
+.sh-nav button.active::after { transform: scaleX(1); }
+.sh-nav button:active { transform: scale(0.94); }
+
+/* Active-ride banner: slow attention glow — it is THE live element on the
+   screen (stops under prefers-reduced-motion via the global blanket rule). */
+@keyframes sh-glow {
+  0%, 100% {
+    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.28),
+      0 0 0 0 rgba(37, 99, 235, 0.4);
+  }
+  50% {
+    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.28),
+      0 0 0 9px rgba(37, 99, 235, 0);
+  }
+}
+.sh-active {
+  animation: sh-rise 0.42s cubic-bezier(0.22, 0.9, 0.24, 1) both,
+    sh-glow 2.4s ease 1.1s infinite;
+}
+
+/* Slightly longer stagger while the dock rises in. */
+.sh-chips { animation-delay: 0.07s; }
+.sh-book { animation-delay: 0.14s; }
+.sh-panel { animation-delay: 0.21s; }
+
+/* Rides / Profile sheet: each child fades in behind the sheet slide. */
+.sh-page .page > * {
+  animation: mv-fade 0.28s ease both;
+}
+.sh-page .page > *:nth-child(2) { animation-delay: 0.04s; }
+.sh-page .page > *:nth-child(3) { animation-delay: 0.08s; }
+.sh-page .page > *:nth-child(4) { animation-delay: 0.12s; }
+
+/* Skeleton rows for the loading states (shimmer lives in motion.css). */
+.sh-skel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+}
+
+/* Empty state fades in where the skeleton was, instead of popping between
+   two loading states. */
+.sh-empty { animation: mv-fade 0.3s ease both; }
+@media (prefers-reduced-motion: reduce) {
+  .sh-empty { animation: none; }
+}

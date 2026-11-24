@@ -3,14 +3,164 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <!-- ===== SEO — Danfolio Logistics ===== -->
+    <title>Danfolio Logistics | Campus Keke and Shuttle Booking</title>
+    <meta
+      name="description"
+      content="Book campus keke and shuttle rides with Danfolio Logistics — fixed fares, verified riders and live tracking. Reserve, pay in the app and ride with proof."
+    />
+    <link rel="canonical" href="https://danfolio-logistics.vercel.app/" />
     <meta name="theme-color" content="#1e3a8a" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Danfolio" />
+
+    <!-- ===== PWA / icons ===== -->
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-    <title>Danfolio Logistics</title>
+    <link rel="icon" href="/favicon.png" sizes="180x180" type="image/png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- ===== Open Graph / Twitter (share cards) ===== -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Danfolio Logistics" />
+    <meta property="og:title" content="Danfolio Logistics | Campus Keke and Shuttle Booking" />
+    <meta
+      property="og:description"
+      content="Book campus keke and shuttle rides with Danfolio Logistics — fixed fares, verified riders and live tracking. Reserve, pay in the app and ride with proof."
+    />
+    <meta property="og:url" content="https://danfolio-logistics.vercel.app/" />
+    <meta property="og:image" content="https://danfolio-logistics.vercel.app/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="DANFOLIO — Built for Everyday Life." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Danfolio Logistics | Campus Keke and Shuttle Booking" />
+    <meta
+      name="twitter:description"
+      content="Book campus keke and shuttle rides with Danfolio Logistics — fixed fares, verified riders and live tracking. Reserve, pay in the app and ride with proof."
+    />
+    <meta name="twitter:image" content="https://danfolio-logistics.vercel.app/og-image.png" />
+
+    <!-- Inter is the design-system typeface (mockup + src/index.css already
+         declare it first); loading it here makes that intent real instead of
+         silently falling back to the system font. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+    <!-- ===== Structured data (Google reads this as the company write-up) =====
+           · Danfolio Logistics → Organization (the company, its slogan)
+           · this site          → WebSite (the company's web presence)
+           · Danfolio Ride      → Product (the company's transit product)
+         "DANFOLIO" is carried as an alternate name of the company. -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "@id": "https://danfolio-logistics.vercel.app/#organization",
+      "name": "Danfolio Logistics",
+      "alternateName": "DANFOLIO",
+      "slogan": "Built for Everyday Life.",
+      "url": "https://danfolio-logistics.vercel.app/",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://danfolio-logistics.vercel.app/logo-mark.png",
+        "width": 180,
+        "height": 180
+      },
+      "description": "Danfolio Logistics is a campus transportation company providing keke and shuttle booking with fixed fares, verified riders and live GPS tracking."
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "@id": "https://danfolio-logistics.vercel.app/#website",
+      "name": "DANFOLIO",
+      "alternateName": "Danfolio Logistics",
+      "slogan": "Built for Everyday Life.",
+      "url": "https://danfolio-logistics.vercel.app/",
+      "description": "Official web presence of DANFOLIO — products and projects for everyday life, including Danfolio Ride, the campus transportation platform.",
+      "publisher": { "@id": "https://danfolio-logistics.vercel.app/#organization" }
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Product",
+      "name": "Danfolio Ride",
+      "alternateName": "Danfolio Logistics",
+      "description": "Danfolio Ride is DANFOLIO's campus transportation platform: fixed fares, verified keke riders, live GPS tracking and in-app payments.",
+      "category": "Campus transportation",
+      "url": "https://danfolio-logistics.vercel.app/",
+      "brand": { "@id": "https://danfolio-logistics.vercel.app/#organization" }
+    }
+    </script>
+
+    <!-- ===== Per-route metadata for this single-page app =================
+         The static tags above describe the home route; once the route is
+         known, this rewrites title/description/canonical/share tags to match
+         it, and marks the signed-in app areas noindex (they need a session
+         and would only produce empty results for Google). Plain JS, no deps. -->
+    <script>
+      (function () {
+        var BASE = 'https://danfolio-logistics.vercel.app'
+        var ROUTES = {
+          '/': {
+            t: 'Danfolio Logistics | Campus Keke and Shuttle Booking',
+            d: 'Book campus keke and shuttle rides with Danfolio Logistics — fixed fares, verified riders and live tracking. Reserve, pay in the app and ride with proof.'
+          },
+          '/login': {
+            t: 'Sign in — Danfolio Ride',
+            d: 'Sign in to Danfolio Ride — students and verified keke riders sign in to book, track and pay for campus trips.'
+          },
+          '/signup': {
+            t: 'Create account — Danfolio Ride',
+            d: 'Create your Danfolio Ride account with your email and phone number, then book campus rides at fixed fares.'
+          },
+          '/forgot-password': {
+            t: 'Reset password — Danfolio Ride',
+            d: 'Reset your Danfolio Ride password.'
+          }
+        }
+        var path = location.pathname.replace(/\/+$/, '') || '/'
+        var route = ROUTES[path]
+
+        function setMeta(selector, content) {
+          var el = document.querySelector(selector)
+          if (el) el.setAttribute('content', content)
+        }
+        function setCanonical(href) {
+          var el = document.querySelector('link[rel="canonical"]')
+          if (!el) {
+            el = document.createElement('link')
+            el.rel = 'canonical'
+            document.head.appendChild(el)
+          }
+          el.setAttribute('href', href)
+        }
+
+        if (route) {
+          document.title = route.t
+          setMeta('meta[name="description"]', route.d)
+          setMeta('meta[property="og:title"]', route.t)
+          setMeta('meta[property="og:description"]', route.d)
+          setMeta('meta[property="og:url"]', BASE + path)
+          setMeta('meta[name="twitter:title"]', route.t)
+          setMeta('meta[name="twitter:description"]', route.d)
+          setCanonical(BASE + path)
+        } else {
+          var robots = document.createElement('meta')
+          robots.setAttribute('name', 'robots')
+          robots.setAttribute('content', 'noindex')
+          document.head.appendChild(robots)
+          var canon = document.querySelector('link[rel="canonical"]')
+          if (canon) canon.parentNode.removeChild(canon)
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

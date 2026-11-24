@@ -1,4 +1,17 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { SERVICE_FEE_NGN, rideTotal } from '../_shared/policy.js'
+
+// start-payment — opens ONE Paystack charge for a ride.
+//
+// Commission model (shared/_shared/policy.js, single source of truth):
+//   student pays = rides.fare + SERVICE_FEE_NGN (₦20), charged once;
+//   rider receives the full agreed fare;
+//   platform keeps the ₦20 fee (minus Paystack's processing fee, which is
+//   estimated into the audit history — it never changes what is charged).
+//
+// Exactly one payment row per ride: a pending attempt blocks a second
+// attempt, a settled payment blocks re-charging (so a re-dispatched ride
+// that a new keke accepts can NEVER be paid twice).
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -111,6 +124,14 @@ Deno.serve(async (req) => {
       return respond({ error: 'The ride has an invalid fare.' }, 400)
     }
 
+    // What the student actually pays: agreed fare + the fixed ₦20 service
+    // fee, in one single charge. The rider still receives the fare.
+    const totalNaira = rideTotal(fareNaira, SERVICE_FEE_NGN)
+
+    if (!totalNaira) {
+      return respond({ error: 'The ride has an invalid total.' }, 400)
+    }
+
     const { data: existingPayment, error: existingError } = await adminClient
       .from('payments')
       .select('id, paystack_ref, status')
@@ -143,7 +164,8 @@ Deno.serve(async (req) => {
         .from('payments')
         .update({
           paystack_ref: reference,
-          amount: fareNaira,
+          amount: totalNaira,
+          service_fee: SERVICE_FEE_NGN,
           status: 'pending',
         })
         .eq('id', existingPayment.id)
@@ -165,7 +187,8 @@ Deno.serve(async (req) => {
         .insert({
           ride_id: ride.id,
           paystack_ref: reference,
-          amount: fareNaira,
+          amount: totalNaira,
+          service_fee: SERVICE_FEE_NGN,
           status: 'pending',
         })
         .select('id')
@@ -177,13 +200,15 @@ Deno.serve(async (req) => {
 
     const transactionBody: Record<string, unknown> = {
       email: user.email,
-      amount: String(fareNaira * 100),
+      amount: String(totalNaira * 100),
       currency: 'NGN',
       reference,
       metadata: {
         ride_id: ride.id,
         student_id: user.id,
         payment_id: paymentId,
+        fare_naira: fareNaira,
+        service_fee_naira: SERVICE_FEE_NGN,
         app: 'Danfolio Logistics',
       },
     }
@@ -279,7 +304,9 @@ Deno.serve(async (req) => {
       reference: paystackData.data.reference,
       authorization_url: paystackData.data.authorization_url,
       access_code: paystackData.data.access_code,
-      amount: fareNaira,
+      amount: totalNaira,
+      fare: fareNaira,
+      service_fee: SERVICE_FEE_NGN,
       currency: 'NGN',
     })
   } catch (error) {

@@ -1,7 +1,113 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Layout from '../../components/Layout.jsx'
 import { supabase } from '../../lib/supabase'
+// ONE source of truth with the server's start-payment charge — the fee the
+// student sees here is exactly the fee Paystack charges (no drift).
+import { SERVICE_FEE_NGN, rideTotal } from '../../../supabase/functions/_shared/policy.js'
+import './PayRide.css'
+
+// Slide-to-pay (mockup screen 7): dragging the knob past the threshold
+// starts the SAME real Paystack checkout as the old button — the gesture is
+// visual, the payment is real. Keyboard: arrows move, Enter/Space confirms.
+function SlideToPay({ onPay, disabled }) {
+  const trackRef = useRef(null)
+  const dragRef = useRef(false)
+  const progressRef = useRef(0)
+  const [progress, setProgress] = useState(0)
+
+  const setBoth = (value) => {
+    progressRef.current = value
+    setProgress(value)
+  }
+
+  function progressFrom(clientX) {
+    const el = trackRef.current
+    if (!el) return 0
+    const rect = el.getBoundingClientRect()
+    const knob = 48
+    const usable = Math.max(1, rect.width - knob - 6)
+    return Math.min(1, Math.max(0, (clientX - rect.left - knob / 2) / usable))
+  }
+
+  function handleDown(e) {
+    if (disabled) return
+    dragRef.current = true
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+    setBoth(progressFrom(e.clientX))
+  }
+
+  function handleMove(e) {
+    if (!dragRef.current || disabled) return
+    setBoth(progressFrom(e.clientX))
+  }
+
+  function handleUp() {
+    if (!dragRef.current) return
+    dragRef.current = false
+    if (progressRef.current >= 0.9) {
+      setBoth(1)
+      onPay()
+    } else {
+      setBoth(0)
+    }
+  }
+
+  function handleKeyDown(e) {
+    if (disabled) return
+    if (e.key === 'ArrowRight') {
+      e.preventDefault()
+      setBoth(Math.min(1, progressRef.current + 0.1))
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault()
+      setBoth(Math.max(0, progressRef.current - 0.1))
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      setBoth(1)
+      onPay()
+    }
+  }
+
+  const done = progress >= 1
+
+  return (
+    <div
+      ref={trackRef}
+      className={'pay-slide' + (done ? ' done' : '')}
+      role="slider"
+      tabIndex={disabled ? -1 : 0}
+      aria-label="Slide to pay"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(progress * 100)}
+      aria-disabled={disabled || undefined}
+      onPointerDown={handleDown}
+      onPointerMove={handleMove}
+      onPointerUp={handleUp}
+      onPointerCancel={handleUp}
+      onKeyDown={handleKeyDown}
+    >
+      <div
+        className="pay-slide-fill"
+        style={{ width: `calc(${progress} * (100% - 52px) + 50px)` }}
+      />
+      <div className="pay-slide-label" aria-hidden="true">
+        {disabled
+          ? 'Slide to pay'
+          : done
+            ? 'Opening Paystack…'
+            : 'Slide to pay →'}
+      </div>
+      <div
+        className="pay-slide-knob"
+        style={{ left: `calc(2px + ${progress} * (100% - 52px))` }}
+        aria-hidden="true"
+      >
+        {done ? '✓' : '›'}
+      </div>
+    </div>
+  )
+}
 
 function loadPaystack() {
   if (window.PaystackPop) return Promise.resolve()
@@ -203,6 +309,9 @@ export default function PayRide({ rideId, onBack }) {
   }
 
   const fare = Number(ride?.fare)
+  // Exactly what start-payment will charge: agreed fare + the fixed ₦20
+  // service fee, in one Paystack charge. The rider still receives the fare.
+  const total = Number.isFinite(fare) && fare > 0 ? rideTotal(fare, SERVICE_FEE_NGN) : null
 
   return (
     <Layout title="Ride payment">
@@ -228,21 +337,42 @@ export default function PayRide({ rideId, onBack }) {
 
             <div className="fare">
               <span>Ride fare</span>
-              <h2>₦{Number.isFinite(fare) ? fare.toLocaleString('en-NG') : '—'}</h2>
+              <b>₦{Number.isFinite(fare) ? fare.toLocaleString('en-NG') : '—'}</b>
+            </div>
+
+            <div className="fare">
+              <span>Service fee</span>
+              <b>₦{SERVICE_FEE_NGN.toLocaleString('en-NG')}</b>
+            </div>
+
+            <div className="fare">
+              <span>Total to pay</span>
+              <b>₦{total !== null ? total.toLocaleString('en-NG') : '—'}</b>
               <span className="badge">
                 {ride.status.replaceAll('_', ' ')}
               </span>
             </div>
 
-            {ride.status === 'accepted' && (
-              <button
-                className="btn"
-                type="button"
-                disabled={paying}
-                onClick={payNow}
-              >
-                {paying ? 'Connecting…' : 'Pay with Paystack'}
-              </button>
+            <p className="muted" style={{ fontSize: 13 }}>
+              Your Keke receives the full ride fare; the service fee is
+              Danfolio’s platform charge and is included in this single
+              payment.
+            </p>
+
+            {ride.status === 'accepted' && !watching && (
+              <>
+                <SlideToPay onPay={payNow} disabled={paying} />
+                <p className="pay-hint">
+                  Slide all the way to the right to open Paystack securely.
+                </p>
+              </>
+            )}
+
+            {watching && (
+              <p className="pay-hint" role="status">
+                Complete payment in the Paystack window — this page is checking
+                for your ticket automatically.
+              </p>
             )}
 
             {['searching'].includes(ride.status) && (
@@ -296,7 +426,7 @@ export default function PayRide({ rideId, onBack }) {
             <h2>{ticket.ticket_no}</h2>
             <span className="badge">{ticket.status}</span>
             <p>Keep this ticket as proof of payment for your ride.</p>
-            <Link to={`/student/ticket/${rideId}`}>
+            <Link className="btn secondary" to={`/student/ticket/${rideId}`}>
               Open ticket
             </Link>
           </div>

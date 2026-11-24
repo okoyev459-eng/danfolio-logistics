@@ -1,0 +1,23 @@
+DANFOLIO — CAMPUS MAP DIGITISATION STARTER
+
+This update adds the campus-vector data structure and digitisation workflow.
+
+WHAT IS INCLUDED
+- public/maps/veritas-campus-reference-anchors.geojson — 19 supplied campus points for alignment/reference.
+- public/maps/veritas-campus-roads.geojson — intentionally empty until verified road geometry is imported.
+- public/maps/veritas-campus-footpaths.geojson — intentionally empty until verified footpaths are imported.
+- public/maps/veritas-campus-buildings.geojson — intentionally empty until verified building footprints are imported.
+- CampusMap.jsx loads and styles these GeoJSON overlays.
+- scripts/import-osm-campus.mjs converts an Overpass JSON export into the three geometry layers.
+- docs/campus-map-digitization.md explains the free tracing and export workflow.
+
+INSTALL
+Extract this ZIP into the root of your existing danfolio-logistics folder and allow the matching files to be replaced. Do not delete your .env.local or other project files.
+
+NEXT
+Open the Veritas campus iD editor link in docs/campus-map-digitization.md, choose Esri World Imagery from Background Settings (B), and map one small section at a time. See the documentation before saving edits.
+
+The starter road/path/building files are empty intentionally. No roads or building outlines have been invented. After the mapped features are saved and exported, run:
+  node scripts/import-osm-campus.mjs ./overpass-veritas-campus.json
+
+Then refresh the app to see the local vector overlays. Keke access must be field-verified before route use.

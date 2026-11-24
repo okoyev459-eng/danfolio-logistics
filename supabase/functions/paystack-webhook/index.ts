@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { estimateProviderFee, rideTotal, SERVICE_FEE_NGN } from '../_shared/policy.js'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,7 +14,20 @@ type PaystackPayload = {
     amount?: number
     currency?: string
     status?: string
+    channel?: string
   }
+}
+
+// Which digital method Paystack reports. Anything we do not recognise stays
+// NULL rather than being guessed — an unknown channel is still digital (it
+// arrived through this webhook, so it is refundable through Paystack), and
+// refunds treat NULL as digital for exactly that reason.
+function normaliseChannel(channel: string | undefined): 'card' | 'transfer' | null {
+  if (!channel) return null
+  const c = channel.toLowerCase()
+  if (c === 'card') return 'card'
+  // bank_transfer, bank, ussd, qr, mobile_money … all settle digitally.
+  return 'transfer'
 }
 
 function constantTimeEqual(a: string, b: string): boolean {
@@ -123,7 +137,7 @@ Deno.serve(async (req) => {
 
     const { data: payment, error: paymentError } = await admin
       .from('payments')
-      .select('id, ride_id, amount, status, paystack_ref')
+      .select('id, ride_id, amount, status, paystack_ref, service_fee')
       .eq('paystack_ref', reference)
       .maybeSingle()
 
@@ -160,13 +174,52 @@ Deno.serve(async (req) => {
     // Record the verified payment. If a later step fails, Paystack can retry
     // and this handler will safely continue from the existing state.
     if (payment.status !== 'success') {
+      const channelMethod = normaliseChannel(
+        (payload.data as { channel?: string } | undefined)?.channel,
+      )
+
+      const updatePayload: Record<string, unknown> = { status: 'success' }
+      if (channelMethod) updatePayload.method = channelMethod
+      // Legacy rows (started before service_fee existed) get it stamped here.
+      if (payment.service_fee === null || payment.service_fee === undefined) {
+        updatePayload.service_fee = SERVICE_FEE_NGN
+      }
+
       const { error: markPaymentError } = await admin
         .from('payments')
-        .update({ status: 'success' })
+        .update(updatePayload)
         .eq('id', payment.id)
         .in('status', ['pending', 'failed'])
 
       if (markPaymentError) throw markPaymentError
+
+      // Auditable history: what the student paid, Danfolio's fixed fee, and
+      // the ESTIMATED provider fee (never used to move money — it documents
+      // the margin after Paystack's cut).
+      const chargedNaira = Number(payment.amount)
+      const providerFee = estimateProviderFee(chargedNaira)
+      const farePart = chargedNaira - SERVICE_FEE_NGN
+
+      const { error: eventError } = await admin.from('ride_events').insert({
+        ride_id: payment.ride_id,
+        actor_role: 'student',
+        event: 'payment_verified',
+        from_status: payment.status,
+        to_status: 'success',
+        metadata: {
+          payment_id: payment.id,
+          paystack_ref: reference,
+          channel: (payload.data as { channel?: string } | undefined)?.channel ?? null,
+          method: channelMethod,
+          charged_naira: chargedNaira,
+          fare_naira: farePart,
+          service_fee_naira: SERVICE_FEE_NGN,
+          provider_fee_estimate: providerFee,
+          expected_total_check: rideTotal(farePart, SERVICE_FEE_NGN) === chargedNaira,
+        },
+      })
+
+      if (eventError) console.error('webhook: could not record payment_verified:', eventError)
     }
 
     if (ride.status === 'cancelled' || ride.status === 'refunded') {

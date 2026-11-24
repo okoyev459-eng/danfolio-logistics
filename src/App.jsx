@@ -2,12 +2,12 @@ import { Routes, Route, Navigate, useParams, useNavigate } from 'react-router-do
 import { useAuth } from './lib/auth.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import RatingPrompt from './components/RatingPrompt.jsx'
+import Landing from './pages/Landing.jsx'
 import Login from './pages/Login.jsx'
 import SignUp from './pages/SignUp.jsx'
 import ForgotPassword from './pages/ForgotPassword.jsx'
 import ResetPassword from './pages/ResetPassword.jsx'
 import StudentHome from './pages/student/Home.jsx'
-import ChooseType from './pages/student/ChooseType.jsx'
 import BookFlow from './pages/student/BookFlow.jsx'
 import Ticket from './pages/student/Ticket.jsx'
 import Verify from './pages/student/Verify.jsx'
@@ -24,11 +24,14 @@ import AdminFares from './pages/admin/Fares.jsx'
 import AdminKekes from './pages/admin/Kekes.jsx'
 import AdminRides from './pages/admin/Rides.jsx'
 import AdminReports from './pages/admin/Reports.jsx'
+import AdminStudents from './pages/admin/Students.jsx'
 
 function RoleHome() {
   const { session, role, ready } = useAuth()
   if (!ready) return <p className="center">Loading…</p>
-  if (!session) return <Navigate to="/login" replace />
+  // Logged out → show the public landing page (approved mockup) instead of
+  // bouncing straight to /login; the header CTAs lead to sign in / sign up.
+  if (!session) return <Landing />
   const to = { student: '/student', keke: '/keke', admin: '/admin' }[role]
   return to ? <Navigate to={to} replace /> : <p className="center">This account has no role yet.</p>
 }
@@ -60,9 +63,11 @@ export default function App() {
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/student" element={student(<StudentHome />)} />
-        <Route path="/student/book" element={student(<ChooseType />)} />
-        <Route path="/student/book/drop" element={student(<BookFlow mode="drop" />)} />
-        <Route path="/student/book/along" element={student(<BookFlow mode="along" />)} />
+        {/* No mode yet → BookFlow opens on the Drop/Along sheet over its map
+            (mockup artboard 3) instead of a separate choose-type page. */}
+        <Route path="/student/book" element={student(<BookFlow />)} />
+        <Route path="/student/book/drop" element={student(<BookFlow initialMode="drop" />)} />
+        <Route path="/student/book/along" element={student(<BookFlow initialMode="along" />)} />
         <Route path="/student/ride/:rideId" element={student(<Ride />)} />
         <Route path="/student/pay/:rideId" element={student(<StudentPayRideRoute />)} />
         <Route path="/student/ticket/:rideId" element={student(<Ticket />)} />
@@ -77,6 +82,7 @@ export default function App() {
         <Route path="/admin/kekes" element={admin(<AdminKekes />)} />
         <Route path="/admin/rides" element={admin(<AdminRides />)} />
         <Route path="/admin/reports" element={admin(<AdminReports />)} />
+        <Route path="/admin/students" element={admin(<AdminStudents />)} />
         <Route path="/map" element={<ProtectedRoute roles={['student', 'keke', 'admin']}><StationMap /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

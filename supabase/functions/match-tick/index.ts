@@ -17,22 +17,26 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 //      90s sits above the client's 20s heartbeat and the dispatcher's own 75s
 //      freshness filter, so one dropped packet never flips a live rider.
 //
-// Scheduling (verified 2026-10 against Supabase docs/CLI/Management API):
+// Scheduling (verified 2026-11 against Supabase docs/CLI/Management API):
 //   Supabase Edge Functions have NO native scheduler — neither the CLI's
 //   `functions deploy` (v2.122.0 has no --schedule flag) nor the Management
 //   API exposes function schedules. The sanctioned scheduler is Supabase Cron
-//   (pg_cron) calling this function through pg_net, with the service key
-//   stored in Vault (Supabase's recommended secret handling):
+//   (pg_cron) calling this function through pg_net, with a DEDICATED random
+//   secret stored in two places only — the function environment and Vault:
 //
-//     1. Dashboard -> Integrations -> Cron -> enable pg_cron
-//        (also enable the pg_net extension; the platform performs the
-//        CREATE EXTENSION, so the project's non-superuser `postgres` role
-//        is not a blocker)
-//     2. -- one-time: store the key in Vault (never in job SQL or the repo):
+//     1. pg_cron + pg_net enabled on the project (CREATE EXTENSION via SQL
+//        as `postgres`; the platform-managed `vault` schema provides
+//        vault.create_secret / vault.decrypted_secrets even when the vault
+//        extension itself is not in pg_available_extensions).
+//     2. -- one-time: set the dedicated secret as an Edge Function secret
+//        (never committed, never printed):
+//          npx supabase secrets set MATCH_TICK_SECRET=<random value>
+//     3. -- one-time: store the SAME value in Vault (never in job SQL, never
+//        in the repo, and never the service-role key):
 //        select vault.create_secret(
-//          '<SERVICE_ROLE_KEY>', 'match-tick-service-role',
-//          'Service role key used by the match-tick cron job');
-//     3. select cron.schedule(
+//          '<MATCH_TICK_SECRET value>', 'match-tick-secret',
+//          'Dedicated scheduler token for the match-tick cron job');
+//     4. select cron.schedule(
 //          'match-tick',
 //          '15 seconds',                -- sub-minute OK on PG >= 15.1.1.61
 //                                        (this project runs PostgreSQL 17.11)
@@ -43,25 +47,30 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 //                'Content-Type', 'application/json',
 //                'Authorization', 'Bearer ' || (
 //                  select decrypted_secret from vault.decrypted_secrets
-//                  where name = 'match-tick-service-role')),
+//                  where name = 'match-tick-secret')),
 //              body := '{}'::jsonb,
 //              timeout_milliseconds := 10000
 //            );
 //          $$
 //        );
-//      Rotate the key later with vault.update_secret — the job never changes.
+//      Rotate with vault.update_secret + `supabase secrets set` — the job
+//      SQL never changes.
 //
 // Authorization (two layers, one header):
-//   Layer 1 — gateway (verify_jwt = true in config.toml): validates that the
-//     Authorization bearer is a JWT signed by this project. The service-role
-//     key is such a JWT, so the scheduled call passes; keyless callers are
-//     rejected at the edge before this code runs.
-//   Layer 2 — this function: exact-match of the Authorization header against
-//     its own SUPABASE_SERVICE_ROLE_KEY env value (the same server-to-server
-//     pattern refund-ride uses). A valid-but-wrong JWT (e.g. the public anon
-//     key) clears the gateway but fails here with 401.
-//   The cron job sends a single Vault-sourced header that satisfies both
-//   layers. Nothing in the function runs before the check completes.
+//   Layer 1 — gateway: match-tick is deployed with verify_jwt = false
+//     (config.toml) because the cron bearer is a dedicated random token, not
+//     a project JWT. This matches the create-ride pattern: the gateway step
+//     is skipped and the function itself enforces a constant-time-ish exact
+//     match, so a valid-but-wrong JWT (e.g. the public anon key) is rejected
+//     here with 401.
+//   Layer 2 — this function: the Authorization header must exactly equal
+//     `Bearer <MATCH_TICK_SECRET>` from its own environment. The dedicated
+//     secret (not the service-role key) authorizes the tick; the service key
+//     is only used as the data-plane client after the check passes. A
+//     secondary exact-match against SUPABASE_SERVICE_ROLE_KEY is kept so
+//     operators can still health-check manually with the server key.
+//   Nothing in the function runs before the check completes, and the cron
+//   job SQL contains only the Vault-sourced dedicated token.
 
 Deno.serve(async (req) => {
   const respond = (body: unknown, status = 200) =>
@@ -79,16 +88,20 @@ Deno.serve(async (req) => {
   try {
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const matchSecret = Deno.env.get('MATCH_TICK_SECRET')
+    const provided = req.headers.get('Authorization')
 
-    // Only the scheduler (or another trusted server caller) may tick.
-    if (
-      !serviceKey ||
-      req.headers.get('Authorization') !== `Bearer ${serviceKey}`
-    ) {
+    // Only the scheduler (holding the dedicated secret) or an operator
+    // (holding the service key, for manual health checks) may tick.
+    const authorized =
+      (Boolean(matchSecret) && provided === `Bearer ${matchSecret}`) ||
+      (Boolean(serviceKey) && provided === `Bearer ${serviceKey}`)
+
+    if (!authorized) {
       return respond({ error: 'Server authorization required.' }, 401)
     }
 
-    if (!supabaseUrl) {
+    if (!supabaseUrl || !serviceKey) {
       console.error('match-tick: missing environment configuration.')
       return respond({ error: 'Server configuration is incomplete.' }, 500)
     }

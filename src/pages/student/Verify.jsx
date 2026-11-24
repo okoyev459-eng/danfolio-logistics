@@ -78,6 +78,12 @@ export default function Verify() {
 
       <p style={{ fontWeight: 600 }}>Rider: match the face, name and code · {now.toLocaleTimeString()}</p>
       <Link className="btn white" to={`/student/ticket/${ride.id}`}>Done</Link>
+      <Link
+        to={`/student/ride/${ride.id}`}
+        style={{ display: 'block', marginTop: 14, color: '#fff', fontWeight: 600 }}
+      >
+        ← Back to ride
+      </Link>
     </div>
   )
 }
