@@ -1,5 +1,8 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { estimateProviderFee, rideTotal, SERVICE_FEE_NGN } from '../_shared/policy.js'
+import { verifyPaystackSignature } from '../_shared/paystack.js'
+import { applyRefundWebhook } from '../_shared/refundFlow.js'
+import { createRefundStore } from '../_shared/refundStore.js'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -10,11 +13,16 @@ const corsHeaders = {
 type PaystackPayload = {
   event?: string
   data?: {
+    id?: number | string
     reference?: string
+    transaction_reference?: string
+    transaction?: { reference?: string }
     amount?: number
     currency?: string
     status?: string
     channel?: string
+    reason?: string
+    message?: string
   }
 }
 
@@ -28,37 +36,6 @@ function normaliseChannel(channel: string | undefined): 'card' | 'transfer' | nu
   if (c === 'card') return 'card'
   // bank_transfer, bank, ussd, qr, mobile_money … all settle digitally.
   return 'transfer'
-}
-
-function constantTimeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false
-
-  let difference = 0
-  for (let i = 0; i < a.length; i++) {
-    difference |= a.charCodeAt(i) ^ b.charCodeAt(i)
-  }
-
-  return difference === 0
-}
-
-async function makeSignature(body: string, secret: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-512' },
-    false,
-    ['sign'],
-  )
-
-  const signature = await crypto.subtle.sign(
-    'HMAC',
-    key,
-    new TextEncoder().encode(body),
-  )
-
-  return Array.from(new Uint8Array(signature))
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('')
 }
 
 Deno.serve(async (req) => {
@@ -94,12 +71,13 @@ Deno.serve(async (req) => {
       return respond({ error: 'Missing payment signature.' }, 401)
     }
 
-    const expectedSignature = await makeSignature(rawBody, secret)
+    const signatureValid = await verifyPaystackSignature({
+      rawBody,
+      signature: suppliedSignature,
+      secret,
+    })
 
-    if (!constantTimeEqual(
-      suppliedSignature.toLowerCase(),
-      expectedSignature,
-    )) {
+    if (!signatureValid) {
       return respond({ error: 'Invalid payment signature.' }, 401)
     }
 
@@ -109,6 +87,22 @@ Deno.serve(async (req) => {
       payload = JSON.parse(rawBody)
     } catch {
       return respond({ error: 'Invalid webhook payload.' }, 400)
+    }
+
+    // Refund outcomes change whether the student's money actually came back.
+    // The signature above is the ONLY thing that makes this trustworthy.
+    if (payload.event === 'refund.processed' || payload.event === 'refund.failed') {
+      const refundAdmin = createClient(supabaseUrl, serviceRoleKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      })
+
+      const outcome = await applyRefundWebhook({
+        store: createRefundStore(refundAdmin),
+        event: payload.event,
+        data: payload.data,
+      })
+
+      return respond({ received: true, ...outcome })
     }
 
     // Acknowledge other event types; this function handles successful charges.
@@ -137,7 +131,7 @@ Deno.serve(async (req) => {
 
     const { data: payment, error: paymentError } = await admin
       .from('payments')
-      .select('id, ride_id, amount, status, paystack_ref, service_fee')
+      .select('id, ride_id, amount, status, paystack_ref, service_fee, refund_status')
       .eq('paystack_ref', reference)
       .maybeSingle()
 
@@ -155,8 +149,14 @@ Deno.serve(async (req) => {
       return respond({ error: 'Payment amount mismatch.' }, 400)
     }
 
-    if (payment.status === 'refunded') {
+    if (payment.status === 'refunded' || payment.refund_status === 'processed') {
       return respond({ received: true, ignored: 'already_refunded' })
+    }
+
+    // The refund is already with Paystack (or needs review): never ask for a
+    // second one just because Paystack re-delivered charge.success.
+    if (payment.refund_status === 'pending') {
+      return respond({ received: true, ignored: 'refund_in_progress' })
     }
 
     const { data: ride, error: rideError } = await admin

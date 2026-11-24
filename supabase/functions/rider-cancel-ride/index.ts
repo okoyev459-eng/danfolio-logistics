@@ -4,8 +4,8 @@ import {
   canInterrupt,
   canRedispatch,
   INCIDENT_REASONS,
-  isCashMethod,
 } from '../_shared/policy.js'
+import { decideRedispatchOutcome } from '../_shared/refundPolicy.js'
 
 // rider-cancel-ride — how a RIDER (or an admin) reports a cancellation,
 // breakdown or emergency, split honestly into the two very different
@@ -518,7 +518,14 @@ Deno.serve(async (req) => {
 
     if (paymentError) throw paymentError
 
-    if (payment?.status !== 'success') {
+    // Shared decision: only a dispatch that found NO keke at all refunds a
+    // settled payment; an offered booking keeps its payment untouched.
+    const redispatchOutcome = decideRedispatchOutcome({
+      dispatchState: dispatch?.state ?? 'no_ride_available',
+      payment,
+    })
+
+    if (redispatchOutcome.action === 'no_refund') {
       await recordEvent(admin, {
         ride_id: rideId,
         actor_id: user.id,
@@ -540,7 +547,7 @@ Deno.serve(async (req) => {
       })
     }
 
-    if (isCashMethod(payment.method)) {
+    if (redispatchOutcome.action === 'manual_cash') {
       // A cash payment never reached Paystack — refunding it is an admin /
       // manual action, recorded here so the history is complete.
       await recordEvent(admin, {
@@ -575,7 +582,12 @@ Deno.serve(async (req) => {
           Authorization: `Bearer ${serviceRoleKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ ride_id: rideId }),
+        body: JSON.stringify({
+          ride_id: rideId,
+          reason: `rider_${reason}`,
+          actor_id: user.id,
+          actor_role: actorRole,
+        }),
         signal: AbortSignal.timeout(25000),
       })
     } catch {

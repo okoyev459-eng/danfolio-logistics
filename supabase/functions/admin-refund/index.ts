@@ -86,7 +86,12 @@ Deno.serve(async (req) => {
             Authorization: `Bearer ${serviceRoleKey}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ ride_id: rideId }),
+                      body: JSON.stringify({
+              ride_id: rideId,
+              reason: 'admin_refund',
+              actor_id: user.id,
+              actor_role: 'admin',
+            }),
           signal: AbortSignal.timeout(25000),
         },
       )
