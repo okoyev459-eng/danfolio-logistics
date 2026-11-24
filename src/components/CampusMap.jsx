@@ -174,10 +174,22 @@ const KIND_COLORS = {
   destination: '#0EA5E9',
 }
 
-const KEKE_SVG =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
-  'stroke-linecap="round" stroke-linejoin="round">' +
-  '<path d="M5 11l1.5-4.2A2 2 0 0 1 8.4 5.5h7.2a2 2 0 0 1 1.9 1.3L19 11M5 11h14M5 11a2 2 0 0 0-2 2v3.5h2M19 11a2 2 0 0 1 2 2v3.5h-2M5 16.5V19m14-2.5V19M7.5 14h.5m8 0h.5"/></svg>'
+function appendKekeSvg(el) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  svg.setAttribute('viewBox', '0 0 24 24')
+  svg.setAttribute('fill', 'none')
+  svg.setAttribute('stroke', 'currentColor')
+  svg.setAttribute('stroke-width', '2')
+  svg.setAttribute('stroke-linecap', 'round')
+  svg.setAttribute('stroke-linejoin', 'round')
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  path.setAttribute(
+    'd',
+    'M5 11l1.5-4.2A2 2 0 0 1 8.4 5.5h7.2a2 2 0 0 1 1.9 1.3L19 11M5 11h14M5 11a2 2 0 0 0-2 2v3.5h2M19 11a2 2 0 0 1 2 2v3.5h-2M5 16.5V19m14-2.5V19M7.5 14h.5m8 0h.5',
+  )
+  svg.appendChild(path)
+  el.appendChild(svg)
+}
 
 // Heartbeat state of one keke row — pure wrapper over tracking.js so every
 // screen (home, booking, ride) classifies live / stale / offline identically.
@@ -222,7 +234,7 @@ function kekePopupHTML(keke, state) {
 function makeKekeElement(highlight, state) {
   const el = document.createElement('div')
   el.className = 'km-keke' + stateClass(state) + (highlight ? ' km-keke-hi' : '')
-  el.innerHTML = KEKE_SVG
+  appendKekeSvg(el)
   return el
 }
 
