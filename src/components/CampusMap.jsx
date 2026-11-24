@@ -34,10 +34,16 @@ import { supabase } from '../lib/supabase'
 //     the `selectedId` pin gets a highlight ring;
 //   - keke riders render as distinct vehicle badges (navy = nearby, blue +
 //     pulsing = your assigned rider via `highlight`);
-//   - the student's own position renders as a cyan dot with an accuracy halo.
+//   - the student's own position renders as a cyan dot with an accuracy halo;
+//   - a MANUAL pick-up pin (amber, draggable, `manualPickup` prop) renders
+//     only when a parent passes one — visually distinct from the GPS dot,
+//     with a "Use my GPS location" button to swap back (props: onUseGps /
+//     onManualPickupChange; optional honest GPS status overlay via
+//     locationState + onLocationRetry).
 //   Markers are RECONCILED, not rebuilt: live position updates move the
-//   existing keke badge with a short display-only tween between two real GPS
-//   fixes (no intermediate coordinates are invented as data).
+//   existing keke badge with a display-only ~1 s tween between two real GPS
+//   fixes (no intermediate coordinates are invented as data), and the
+//   blue dot + accuracy circle are updated in place (setLngLat / setData).
 //
 // Camera: the view auto-fits when the SET of pins changes (ids), not on
 //   every live position tick, so a moving keke never yanks the camera.
@@ -231,21 +237,69 @@ function makeKekeElement(highlight, state) {
 
 // Display-only tween between two REAL fixes (both endpoints are measured
 // GPS positions; the intermediate frames are animation, not data).
-const TWEEN_MS = 450
+// ~1 s glide (task 4): long enough to read as motion on a phone, short
+// enough that the badge never looks "behind" the truth.
+const TWEEN_MS = 1000
 const TWEEN_MAX_DEG = 0.005 // ~500 m — beyond that, snap instead of gliding
 function tweenMarker(marker, from, to) {
   const start = performance.now()
+  marker._kmTweenTo = to
   const step = (t) => {
+    // Belt-and-braces with the visibilitychange snap below: if a frame does
+    // land while hidden, land on the REAL target instead of animating.
+    if (typeof document !== 'undefined' && document.hidden) {
+      marker.setLngLat(to)
+      marker._kmTween = null
+      marker._kmTweenTo = null
+      return
+    }
     const p = Math.min(1, (t - start) / TWEEN_MS)
     const eased = 1 - (1 - p) ** 2
     marker.setLngLat([
       from[0] + (to[0] - from[0]) * eased,
       from[1] + (to[1] - from[1]) * eased,
     ])
-    if (p < 1) marker._kmTween = requestAnimationFrame(step)
-    else marker._kmTween = null
+    if (p < 1) {
+      marker._kmTween = requestAnimationFrame(step)
+    } else {
+      marker._kmTween = null
+      marker._kmTweenTo = null
+    }
   }
   marker._kmTween = requestAnimationFrame(step)
+}
+
+// Amber manual pick-up pin — deliberately NOT the cyan GPS dot (task 2):
+// different shape, colour and a persistent "Pick-up" label, so "the point
+// I chose" can never be mistaken for "where I actually am".
+const PICKUP_SVG =
+  '<svg viewBox="0 0 24 32" fill="#F59E0B" stroke="#FFFFFF" stroke-width="1.6" ' +
+  'stroke-linejoin="round" aria-hidden="true">' +
+  '<path d="M12 1.5A8.5 8.5 0 0 0 3.5 10c0 6.4 8.5 20 8.5 20s8.5-13.6 8.5-20A8.5 8.5 0 0 0 12 1.5z"/>' +
+  '<circle cx="12" cy="10" r="3.2" fill="#FFFFFF" stroke="none"/></svg>'
+
+// Honest GPS wording — mirrors the student home / booking panel messages
+// (same words, so the app never contradicts itself).
+const GPS_STATUS_MESSAGES = {
+  denied: 'Location access is off — turn it on to see your position on the map.',
+  insecure: 'Location is blocked because this page is open over plain http:// — open the app over HTTPS.',
+  unavailable: 'Your location is unavailable right now — you can still browse the campus map.',
+  timeout: 'Your location is unavailable right now — you can still browse the campus map.',
+}
+
+// Two-point (direct) lines have nothing to reveal frame-by-frame. Split a
+// STRAIGHT segment into collinear points — the geometry is identical, only
+// the drawing progress is animated. Road routes already arrive with many
+// points and are passed through unchanged.
+function subdivideStraight(line, pieces = 24) {
+  if (!Array.isArray(line) || line.length !== 2) return line
+  const [[x1, y1], [x2, y2]] = line
+  const out = []
+  for (let i = 0; i <= pieces; i++) {
+    const t = i / pieces
+    out.push([x1 + (x2 - x1) * t, y1 + (y2 - y1) * t])
+  }
+  return out
 }
 
 const CampusMap = forwardRef(function CampusMap(
@@ -259,6 +313,16 @@ const CampusMap = forwardRef(function CampusMap(
     onRouteInfo = null,
     userLocation = null,
     userAccuracy = null,
+    // Manual pick-up (task 2): a controlled pin set by tapping the map or
+    // dragging, deliberately separate from the GPS dot. Parents opt in via
+    // props — with none passed, the map behaves exactly as before.
+    manualPickup = null,
+    onManualPickupChange = null,
+    onUseGps = null,
+    // Optional honest GPS status overlay ("Location unavailable" + retry)
+    // driven by the parent's useGeolocation state.
+    locationState = null,
+    onLocationRetry = null,
     selectedId = null,
     animate = false,
     navControls = true,
@@ -273,6 +337,10 @@ const CampusMap = forwardRef(function CampusMap(
   const pointMarkersRef = useRef(new Map())
   const kekeMarkersRef = useRef(new Map())
   const userMarkerRef = useRef(null)
+  const pickupMarkerRef = useRef(null)
+  // Last drawn accuracy-circle key (lng,lat,radius) — avoids re-writing the
+  // polygon data when the fix has not meaningfully changed.
+  const userCircleKeyRef = useRef(null)
   const [failed, setFailed] = useState(false)
   const [basemapWarning, setBasemapWarning] = useState('')
   const [routeNote, setRouteNote] = useState('')
@@ -303,6 +371,8 @@ const CampusMap = forwardRef(function CampusMap(
   // default far away from the ride (the "wrong location" bug).
   const dataFitRef = useRef(0)
   const routeModeRef = useRef(null) // 'road' | 'direct' | null
+  // Active route-draw animation (rAF handle) — cancelled on redraw/unmount.
+  const routeAnimRef = useRef(null)
 
   // Keep the latest callbacks in refs so effects never re-run just because
   // the parent re-created a function.
@@ -316,6 +386,8 @@ const CampusMap = forwardRef(function CampusMap(
   onSelectRef.current = onSelect
   const onMapClickRef = useRef(onMapClick)
   onMapClickRef.current = onMapClick
+  const onManualPickupChangeRef = useRef(onManualPickupChange)
+  onManualPickupChangeRef.current = onManualPickupChange
   const suppressClickRef = useRef(0)
   const interactedRef = useRef(false)
 
@@ -420,6 +492,8 @@ const CampusMap = forwardRef(function CampusMap(
     kekeMarkersRef.current.clear()
     userMarkerRef.current?.remove()
     userMarkerRef.current = null
+    pickupMarkerRef.current?.remove()
+    pickupMarkerRef.current = null
   }
 
   function retryMap() {
@@ -501,12 +575,13 @@ const CampusMap = forwardRef(function CampusMap(
     }).catch(() => {})
 
     map.on('click', (event) => {
-      if (!onMapClickRef.current) return
+      if (!onMapClickRef.current && !onManualPickupChangeRef.current) return
       if (Date.now() - suppressClickRef.current < 300) return // marker tap
-      onMapClickRef.current({
-        lat: Number(event.lngLat.lat.toFixed(6)),
-        lng: Number(event.lngLat.lng.toFixed(6)),
-      })
+      const lat = Number(event.lngLat.lat.toFixed(6))
+      const lng = Number(event.lngLat.lng.toFixed(6))
+      if (onMapClickRef.current) onMapClickRef.current({ lat, lng })
+      // Tapping empty map = choosing a manual pick-up point (task 2).
+      if (onManualPickupChangeRef.current) onManualPickupChangeRef.current({ lat, lng })
     })
 
     // Keep occluded markers dimmed while the camera moves.
@@ -748,43 +823,132 @@ const CampusMap = forwardRef(function CampusMap(
   }, [pointsIdsKey, kekesIdsKey, failed, retryKey])
 
   // The student's own position: blue dot + accuracy halo.
+  // UPDATED IN PLACE: the marker is created once and moved with setLngLat,
+  // the halo polygon with setData — never remove/re-add per GPS tick (that
+  // DOM churn flickers the dot and stutters low-end Android, task 5).
   useEffect(() => {
     const map = mapRef.current
     if (!map || failed || !styleReady) return
 
-    userMarkerRef.current?.remove()
-    userMarkerRef.current = null
-    if (map.getLayer('user-accuracy')) map.removeLayer('user-accuracy')
-    if (map.getSource('user-accuracy')) map.removeSource('user-accuracy')
+    const hasPos = validCoord(userLocation)
 
-    if (!validCoord(userLocation)) return
-
-    const el = document.createElement('div')
-    el.className = 'km-user'
-    userMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'center' })
-      .setLngLat([Number(userLocation.lng), Number(userLocation.lat)])
-      .addTo(map)
-
-    const radius = Number(userAccuracy)
-    if (Number.isFinite(radius) && radius > 0) {
-      map.addSource('user-accuracy', {
-        type: 'geojson',
-        data: {
-          type: 'Feature',
-          geometry: {
-            type: 'Polygon',
-            coordinates: [circlePolygon(Number(userLocation.lng), Number(userLocation.lat), Math.min(radius, 250))],
-          },
-        },
-      })
-      map.addLayer({
-        id: 'user-accuracy',
-        type: 'fill',
-        source: 'user-accuracy',
-        paint: { 'fill-color': '#0EA5E9', 'fill-opacity': 0.12 },
-      })
+    if (!hasPos) {
+      userMarkerRef.current?.remove()
+      userMarkerRef.current = null
+    } else if (!userMarkerRef.current) {
+      const el = document.createElement('div')
+      el.className = 'km-user'
+      userMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'center' })
+        .setLngLat([Number(userLocation.lng), Number(userLocation.lat)])
+        .addTo(map)
+    } else {
+      userMarkerRef.current.setLngLat([Number(userLocation.lng), Number(userLocation.lat)])
     }
+
+    // Accuracy halo. A style (re)load wipes sources/layers but NOT DOM
+    // markers — getSource() returning nothing means "re-add", otherwise
+    // just refresh the polygon when lng,lat,radius actually changed.
+    const radius = Number(userAccuracy)
+    const wantCircle = hasPos && Number.isFinite(radius) && radius > 0
+    if (!wantCircle) {
+      if (map.getLayer('user-accuracy')) map.removeLayer('user-accuracy')
+      if (map.getSource('user-accuracy')) map.removeSource('user-accuracy')
+      userCircleKeyRef.current = null
+      return
+    }
+
+    const circleData = {
+      type: 'Feature',
+      geometry: {
+        type: 'Polygon',
+        coordinates: [circlePolygon(Number(userLocation.lng), Number(userLocation.lat), Math.min(radius, 250))],
+      },
+    }
+    const circleKey = `${Number(userLocation.lng).toFixed(6)},${Number(userLocation.lat).toFixed(6)},${Math.round(radius)}`
+
+    if (map.getSource('user-accuracy')) {
+      if (userCircleKeyRef.current !== circleKey) {
+        map.getSource('user-accuracy').setData(circleData)
+        userCircleKeyRef.current = circleKey
+      }
+      return
+    }
+    map.addSource('user-accuracy', { type: 'geojson', data: circleData })
+    map.addLayer({
+      id: 'user-accuracy',
+      type: 'fill',
+      source: 'user-accuracy',
+      paint: { 'fill-color': '#0EA5E9', 'fill-opacity': 0.12 },
+    })
+    userCircleKeyRef.current = circleKey
   }, [userKey, failed, styleReady, styleEpoch, retryKey])
+
+  // Manual pick-up pin (task 2): amber, draggable, set by tapping the map
+  // or dragging. Rendered only when the parent passes one — the map stays a
+  // controlled component and behaves exactly as before with none given.
+  const pickupKey = JSON.stringify(manualPickup)
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || failed) return
+
+    if (!validCoord(manualPickup)) {
+      pickupMarkerRef.current?.remove()
+      pickupMarkerRef.current = null
+      return
+    }
+
+    const lngLat = [Number(manualPickup.lng), Number(manualPickup.lat)]
+    if (!pickupMarkerRef.current) {
+      const el = document.createElement('div')
+      el.className = 'km-pickup'
+      el.title = 'Manual pick-up point — drag to adjust'
+      el.innerHTML = `${PICKUP_SVG}<span class="km-pickup-label">Pick-up</span>`
+      const marker = new maplibregl.Marker({ element: el, anchor: 'bottom', draggable: true })
+        .setLngLat(lngLat)
+        .addTo(map)
+      marker.on('dragend', () => {
+        const pos = marker.getLngLat()
+        suppressClickRef.current = Date.now()
+        onManualPickupChangeRef.current?.({
+          lat: Number(pos.lat.toFixed(6)),
+          lng: Number(pos.lng.toFixed(6)),
+        })
+      })
+      // A pin tap must not also drop a NEW pickup on the map underneath.
+      marker.getElement().addEventListener('click', () => {
+        suppressClickRef.current = Date.now()
+      })
+      pickupMarkerRef.current = marker
+    } else {
+      // Parent-driven move (e.g. "Use my GPS location"). While the key is
+      // unchanged the effect does not re-run, so an in-progress drag is
+      // never fought.
+      pickupMarkerRef.current.setLngLat(lngLat)
+    }
+  }, [pickupKey, failed, retryKey])
+
+  // Pause keke tweens when the tab hides (task 4): rAF stops firing in a
+  // hidden tab, so on resume a time-based tween would jump-cut to its end.
+  // Snap every in-flight tween to its REAL target instead — no fabricated
+  // motion, no catch-up jump.
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState !== 'hidden') return
+      for (const entry of kekeMarkersRef.current.values()) {
+        const marker = entry.marker
+        if (marker._kmTween) {
+          cancelAnimationFrame(marker._kmTween)
+          marker._kmTween = null
+        }
+        if (marker._kmTweenTo) {
+          marker.setLngLat(marker._kmTweenTo)
+          marker._kmTweenTo = null
+        }
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [])
 
   // Danfolio's locally maintained campus vectors. These overlay the
   // general basemap and become the campus-specific source of truth as the
@@ -848,6 +1012,10 @@ const CampusMap = forwardRef(function CampusMap(
         if (map.getLayer(`${sourceId}-casing`)) map.removeLayer(`${sourceId}-casing`)
         if (map.getSource(sourceId)) map.removeSource(sourceId)
       }
+      if (routeAnimRef.current) {
+        cancelAnimationFrame(routeAnimRef.current)
+        routeAnimRef.current = null
+      }
       routeModeRef.current = null
       setRouteNote('')
     }
@@ -862,6 +1030,59 @@ const CampusMap = forwardRef(function CampusMap(
       [Number(from.lng), Number(from.lat)],
       [Number(to.lng), Number(to.lat)],
     ]
+
+    // Draw-on animation for a journey that was just selected (task 3):
+    // the line reveals head-to-tail over ~700 ms, ONLY while a route is
+    // being drawn — idle (no route) animates nothing — and
+    // prefers-reduced-motion skips straight to the full line. The final
+    // frame is always the complete, unmodified route geometry.
+    const revealRoute = (line) => {
+      if (routeAnimRef.current) {
+        cancelAnimationFrame(routeAnimRef.current)
+        routeAnimRef.current = null
+      }
+      let reduced = false
+      try {
+        reduced = Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches)
+      } catch {
+        reduced = false
+      }
+      if (reduced) return
+      const full = subdivideStraight(line)
+      if (full.length < 3) return
+
+      const paint = (count) => {
+        const src = map.getSource(sourceId)
+        if (!src) return false
+        src.setData({
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: full.slice(0, count) },
+          properties: {},
+        })
+        return true
+      }
+
+      const total = full.length
+      const DURATION = 700
+      const start = performance.now()
+      if (!paint(2)) return
+      const step = (t) => {
+        if (mapRef.current !== map || !map.getSource(sourceId)) {
+          routeAnimRef.current = null
+          return
+        }
+        const p = Math.min(1, (t - start) / DURATION)
+        const eased = 1 - (1 - p) ** 3
+        const count = Math.max(2, Math.ceil(total * eased))
+        paint(count)
+        if (p < 1) {
+          routeAnimRef.current = requestAnimationFrame(step)
+        } else {
+          routeAnimRef.current = null
+        }
+      }
+      routeAnimRef.current = requestAnimationFrame(step)
+    }
 
     // The layer is rebuilt when the mode flips (road ↔ direct) so paint
     // properties are always created correct; otherwise just swap coordinates.
@@ -910,6 +1131,8 @@ const CampusMap = forwardRef(function CampusMap(
       }
       routeModeRef.current = mode
       setRouteNote(fallback ? ROUTE_FALLBACK_NOTE : '')
+      // Journey selected → draw it on (no-op when reduced-motion is set).
+      revealRoute(line)
     }
 
     // Local campus road graph first (it knows the imported roads — the
@@ -966,6 +1189,39 @@ const CampusMap = forwardRef(function CampusMap(
         className="campus-map"
         style={{ height, borderRadius: 16, overflow: 'hidden' }}
       />
+      {/* Honest GPS status (task 1): only rendered when the parent passes
+          its useGeolocation state — never invents a state of its own, and
+          never shows a position it does not have. */}
+      {(() => {
+        const blocked =
+          !validCoord(userLocation) && locationState && GPS_STATUS_MESSAGES[locationState]
+            ? locationState
+            : null
+        if (!blocked) return null
+        return (
+          <div className="km-gps-status" role="status">
+            <span>{GPS_STATUS_MESSAGES[blocked]}</span>
+            {blocked !== 'insecure' && onLocationRetry && (
+              <button type="button" onClick={() => onLocationRetry?.()}>Retry</button>
+            )}
+          </div>
+        )
+      })()}
+      {/* Task 2: swap the manual pin back to the real GPS position. */}
+      {validCoord(userLocation) &&
+        validCoord(manualPickup) &&
+        (onUseGps || onManualPickupChange) && (
+          <button
+            type="button"
+            className="km-usegps"
+            onClick={() => {
+              if (onUseGps) onUseGps(userLocation)
+              else onManualPickupChange?.(userLocation)
+            }}
+          >
+            Use my GPS location
+          </button>
+        )}
       {routeNote && (
         <div className="muted km-route-note" style={{ fontSize: 12, marginTop: 4 }}>{routeNote}</div>
       )}
