@@ -252,3 +252,22 @@
   color: #1e3a8a;
   margin-top: 2px;
 }
+
+/* ==========================================================================
+   Offer-modal motion: dim-fade + spring pop, ring sweep, code-box cursor
+   (all mount/one-shot; reduced-motion is handled by motion.css globally)
+   ========================================================================== */
+.ko-overlay { animation: mv-fade 0.22s ease both; }
+.ko-modal { animation: mv-pop 0.36s var(--mv-spring, cubic-bezier(0.22, 0.9, 0.24, 1)) both; }
+.ko-ring-wrap { animation: mv-rise 0.4s var(--mv-spring, cubic-bezier(0.22, 0.9, 0.24, 1)) 0.12s both; }
+.ko-body { animation: mv-rise 0.4s var(--mv-spring, cubic-bezier(0.22, 0.9, 0.24, 1)) 0.18s both; }
+
+/* The countdown ring is the 2nd circle (track, then progress): sweep the
+   dashoffset smoothly instead of stepping once per second. */
+.ko-ring-wrap svg circle:nth-of-type(2) {
+  transition: stroke-dashoffset 1s linear;
+}
+
+/* The focused code box breathes so the cursor position is obvious. */
+.ko-code-boxes span.cur { animation: mv-cursor 1.1s ease-in-out infinite; }
+.ko-code-boxes span:not(:empty) { border-color: #93c5fd; }

@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from './lib/auth.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
+import Landing from './pages/Landing.jsx'
 import Login from './pages/Login.jsx'
 import SignUp from './pages/SignUp.jsx'
 import ForgotPassword from './pages/ForgotPassword.jsx'
@@ -27,7 +28,9 @@ import AdminStudents from './pages/admin/Students.jsx'
 function RoleHome() {
   const { session, role, ready } = useAuth()
   if (!ready) return <p className="center">Loading…</p>
-  if (!session) return <Navigate to="/login" replace />
+  // Logged out → show the public landing page (approved mockup) instead of
+  // bouncing straight to /login; the header CTAs lead to sign in / sign up.
+  if (!session) return <Landing />
   const to = { student: '/student', keke: '/keke', admin: '/admin' }[role]
   return to ? <Navigate to={to} replace /> : <p className="center">This account has no role yet.</p>
 }

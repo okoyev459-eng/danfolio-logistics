@@ -1,0 +1,212 @@
+/* ==========================================================================
+   motion.css — the app-wide motion layer (imported once in main.jsx after
+   index.css so these rules win at equal specificity).
+
+   Design language (shared with the landing + mockup):
+     --mv-fast   150ms   taps, presses, focus
+     --mv-med    280ms   sheets, messages
+     --mv-slow   450ms   entrances
+     --mv-spring cubic-bezier(0.22, 0.9, 0.24, 1) — the app's house curve
+
+   Everything here is pure CSS — no dependencies. Every animation is
+   one-shot on mount (React re-renders do NOT restart CSS animations —
+   the DOM node must be replaced), and a blanket prefers-reduced-motion
+   rule at the bottom turns all of it off for users who ask for that.
+   ========================================================================== */
+
+:root {
+  --mv-fast: 150ms;
+  --mv-med: 280ms;
+  --mv-slow: 450ms;
+  --mv-spring: cubic-bezier(0.22, 0.9, 0.24, 1);
+}
+
+/* ---- Mobile-first touch polish ------------------------------------------ */
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+body {
+  /* Kill the grey tap flash — every interactive element below ships its
+     own :active feedback instead. */
+  -webkit-tap-highlight-color: transparent;
+  /* Deselected-text colour stays on-brand. */
+}
+::selection {
+  background: #dbeafe;
+  color: #1e3a8a;
+}
+/* Removes the 300ms double-tap-zoom delay on touch. */
+button,
+a,
+.btn,
+label,
+select,
+summary {
+  touch-action: manipulation;
+}
+
+/* ---- Shared entrance keyframes ------------------------------------------ */
+@keyframes mv-rise {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes mv-pop {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes mv-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes mv-slide-up {
+  from { transform: translateY(100%); }
+  to { transform: none; }
+}
+@keyframes mv-bar-grow {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+@keyframes mv-shimmer {
+  to { transform: translateX(100%); }
+}
+@keyframes mv-cursor {
+  0%, 100% { border-color: #2563eb; background: #dbeafe; }
+  50% { border-color: #93c5fd; background: #eff6ff; }
+}
+@keyframes mv-dot {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.35); }
+}
+
+/* ---- Global press feedback ----------------------------------------------
+   Specificity note: `button:active` (0,1,1) intentionally LOSES to every
+   component-level `:active` rule (0,2,0 — .sh-chip, .sh-book, …), so
+   components keep their own stronger press styles. */
+button {
+  transition: transform var(--mv-fast) ease, box-shadow var(--mv-fast) ease,
+    background var(--mv-fast) ease, border-color var(--mv-fast) ease,
+    opacity var(--mv-fast) ease;
+}
+button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+a.btn:active {
+  transform: scale(0.97);
+}
+/* Disabled buttons never animate a press. */
+button:disabled:active {
+  transform: none;
+}
+
+/* ---- Keyboard focus stays visible (a11y) -------------------------------- */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.45);
+  outline-offset: 2px;
+}
+
+/* ---- Consistent electric-blue focus on EVERY form control ---------------- */
+/* (auth.css already does this inside .auth; this extends the same language
+   to admin/report/keke forms. Specificity 0,1,1 — component rules win.) */
+input,
+select,
+textarea {
+  transition: border-color var(--mv-fast) ease, box-shadow var(--mv-fast) ease;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none; /* the halo above is the focus indicator */
+}
+
+/* ---- Message rows animate in when they appear --------------------------- */
+.error,
+.ok {
+  animation: mv-pop var(--mv-med) var(--mv-spring) both;
+}
+
+/* ---- Screen shells rise on mount ---------------------------------------- */
+.page {
+  animation: mv-rise var(--mv-slow) var(--mv-spring) both;
+}
+/* Cards direct-mounted into a screen rise with it (lists arriving from
+   Supabase animate in as each row mounts). Excluded inside .sh-page —
+   that sheet runs its own slide + per-child fade (home.css). */
+.page > .card,
+.slip {
+  animation: mv-rise var(--mv-slow) var(--mv-spring) both;
+}
+.sh-page .page {
+  animation: none;
+}
+/* Profile / verify avatar pops in. */
+.avatar,
+.kr-avatar {
+  animation: mv-pop 0.5s var(--mv-spring) both;
+}
+
+/* ---- Skeleton loaders (mount-shimmer; swap for real rows when data lands) */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: #e2e8f0;
+  border-radius: 12px;
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.75), transparent);
+  animation: mv-shimmer 1.4s ease infinite;
+}
+.skeleton-row { height: 46px; }
+.skeleton-block { height: 76px; }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---- BottomSheet entrance -----------------------------------------------
+   Animates the `translate` property (composes WITH the inline `transform`
+   that drives snapping/dragging — never fights it) plus opacity. */
+.bs {
+  animation: mv-sheet-in var(--mv-med) var(--mv-spring) both;
+}
+@keyframes mv-sheet-in {
+  from { translate: 0 24%; opacity: 0; }
+  to { translate: 0 0; opacity: 1; }
+}
+.bs-handle {
+  animation: mv-fade var(--mv-slow) var(--mv-spring) 0.1s both;
+}
+
+/* ---- Reduced motion: everything above becomes instant ------------------- */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
