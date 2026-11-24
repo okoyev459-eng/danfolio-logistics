@@ -408,7 +408,7 @@ export default function StudentHome() {
       )}
 
       {tab !== 'Home' && (
-        <div className="sh-page">
+        <div className="sh-page" key={tab}>
           <div className="page">
             {tab === 'Rides' && (
               <>

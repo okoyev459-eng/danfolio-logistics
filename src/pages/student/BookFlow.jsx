@@ -1512,7 +1512,17 @@ export default function BookFlow({ initialMode = null }) {
             </>
           }
         >
-          {activeRide ? rideBody() : planningBody()}
+          {/* Keyed stage: moving to another booking step (pick-up →
+              destination) or to another ride status re-mounts this block, so
+              its CSS entrance replays once. Ordinary re-renders (fare
+              lookups, GPS ticks, realtime status text) keep the same key and
+              never restart it. */}
+          <div
+            className="bk-stage"
+            key={activeRide ? `ride-${activeRide.status}` : stage}
+          >
+            {activeRide ? rideBody() : planningBody()}
+          </div>
         </BottomSheet>
       )}
     </div>

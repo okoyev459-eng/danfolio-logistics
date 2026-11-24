@@ -559,8 +559,23 @@ export default function Ride() {
           </div>
         )}
 
-        <h2 style={{ marginTop: 20 }}>{copy.title}</h2>
-        <p className="muted" style={{ marginTop: -4 }}>{copy.body}</p>
+        {/* Keyed on the status so the words re-enter when the ride actually
+            changes state (accepted → paid → arrived → on trip → completed),
+            and never on an unrelated re-render. */}
+        <h2
+          className="ride-status"
+          key={`ride-status-${ride.status}`}
+          style={{ marginTop: 20 }}
+        >
+          {copy.title}
+        </h2>
+        <p
+          className="muted ride-status-sub"
+          key={`ride-status-sub-${ride.status}`}
+          style={{ marginTop: -4 }}
+        >
+          {copy.body}
+        </p>
 
         <div className="fare" role="status" aria-live="polite">
           <span>{ride.mode === 'drop' ? 'Drop' : 'Along'} · fixed fare</span>
@@ -590,7 +605,7 @@ export default function Ride() {
         {notice && <div className="ok" role="status">{notice}</div>}
 
         {keke && (
-          <div className="card row">
+          <div className="card row ride-rider">
             <span>
               <span className="muted">Your rider</span>
               <br />

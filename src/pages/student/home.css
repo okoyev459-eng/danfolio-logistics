@@ -394,3 +394,10 @@
   gap: 10px;
   padding: 10px 12px;
 }
+
+/* Empty state fades in where the skeleton was, instead of popping between
+   two loading states. */
+.sh-empty { animation: mv-fade 0.3s ease both; }
+@media (prefers-reduced-motion: reduce) {
+  .sh-empty { animation: none; }
+}
