@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../lib/auth.jsx'
+import { supabase } from '../lib/supabase'
 import './TermsGate.css'
 
 // Bump this whenever the Terms/Privacy text changes so everyone is asked again.
@@ -16,12 +17,25 @@ function readAccepted(userId) {
   }
 }
 
+// Local mirror of the answer, so the app stays usable if the network is down
+// or the request that records consent fails.
+function writeAccepted(userId) {
+  try {
+    localStorage.setItem(
+      storageKey(userId),
+      JSON.stringify({ version: TERMS_VERSION, acceptedAt: new Date().toISOString() }),
+    )
+  } catch {
+    // Storage unavailable (private mode) — this session only.
+  }
+}
+
 // Blocking consent gate: a signed-in student who has never accepted the Terms
 // of Service + Privacy Policy gets this sheet before they can use the app.
 //
-// Acceptance is stored per account and per terms version in localStorage, so
-// this stays a client-only change (no profiles migration). A server-side
-// consent record would need its own column/table.
+// The answer lives on the account (profiles.terms_version, written by the
+// accept_terms RPC) so it follows the student to another device, with
+// localStorage as a fast local mirror.
 export default function TermsGate() {
   const { session, role, ready, signOut } = useAuth()
   const userId = session?.user?.id ?? null
@@ -30,18 +44,44 @@ export default function TermsGate() {
   // Read the stored answer for this account during render (no flash of the app
   // behind the sheet). Re-reading when the account changes means one student's
   // answer is never inherited by the next account on a shared device.
-  const [consent, setConsent] = useState({ userId: null, accepted: true })
+  const [consent, setConsent] = useState({ userId: null, accepted: true, checked: true })
   if (gateUser && consent.userId !== gateUser) {
-    setConsent({ userId: gateUser, accepted: readAccepted(gateUser) })
+    setConsent({ userId: gateUser, accepted: readAccepted(gateUser), checked: false })
   }
 
-  const open = Boolean(gateUser) && consent.userId === gateUser && !consent.accepted
+  // Confirm against the account record before showing the sheet, so a student
+  // who accepted on another device is not asked again.
+  useEffect(() => {
+    if (!gateUser || consent.userId !== gateUser || consent.checked) return undefined
+    let active = true
+    supabase
+      .from('profiles')
+      .select('terms_version')
+      .eq('id', gateUser)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!active) return
+        const serverAccepted = data?.terms_version === TERMS_VERSION
+        if (serverAccepted) writeAccepted(gateUser)
+        setConsent((prev) =>
+          prev.userId === gateUser
+            ? { ...prev, accepted: prev.accepted || serverAccepted, checked: true }
+            : prev,
+        )
+      })
+    return () => {
+      active = false
+    }
+  }, [gateUser, consent.userId, consent.checked])
+
+  const open =
+    Boolean(gateUser) && consent.userId === gateUser && consent.checked && !consent.accepted
   const [checked, setChecked] = useState(false)
   const [busy, setBusy] = useState(false)
   const cardRef = useRef(null)
 
   useEffect(() => {
-    if (!open) return
+    if (!open) return undefined
     setChecked(false)
     setBusy(false)
     cardRef.current?.focus()
@@ -54,15 +94,14 @@ export default function TermsGate() {
 
   function accept() {
     if (!gateUser || !checked) return
-    try {
-      localStorage.setItem(
-        storageKey(gateUser),
-        JSON.stringify({ version: TERMS_VERSION, acceptedAt: new Date().toISOString() }),
-      )
-    } catch {
-      // Storage unavailable (private mode) — let this session through only.
-    }
-    setConsent({ userId: gateUser, accepted: true })
+    writeAccepted(gateUser)
+    setConsent({ userId: gateUser, accepted: true, checked: true })
+    // Keep the durable record on the account too. A failure here (offline, or
+    // the migration not applied yet) must not trap the student, so the local
+    // answer above already lets them through and the RPC is retried next visit.
+    supabase.rpc('accept_terms', { p_version: TERMS_VERSION }).then(({ error }) => {
+      if (error) console.warn('Terms acceptance was not recorded:', error.message)
+    })
   }
 
   async function decline() {
