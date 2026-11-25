@@ -501,6 +501,36 @@ entrypoint = "./functions/match-tick/index.ts"
 # Do NOT put any real secret in this file — it lives in the function env and
 # Vault only.
 
+[functions.notify-tick]
+enabled = true
+# Server-to-server push delivery + stale-rider expiry. Caller must send
+# `Authorization: Bearer <NOTIFY_TICK_SECRET>` — a dedicated random token
+# set via `supabase secrets set` (function environment) and mirrored in
+# Vault for the cron job SQL. Gateway JWT verification is OFF (same
+# pattern as match-tick); the function rejects anything that is not an
+# exact match with 401 before doing any work.
+verify_jwt = false
+entrypoint = "./functions/notify-tick/index.ts"
+# One-time setup (never put real values in this file):
+#   1. CREATE EXTENSION pg_cron / pg_net (already applied on this project)
+#   2. npx supabase secrets set NOTIFY_TICK_SECRET='<random value>'
+#   3. npx supabase secrets set VAPID_PUBLIC_KEY='...' VAPID_PRIVATE_KEY='...'
+#        VAPID_SUBJECT='mailto:<admin email>'   (web-push VAPID key pair)
+#   4. select vault.create_secret('<same NOTIFY_TICK_SECRET value>',
+#        'notify-tick-secret', 'notify-tick cron job token');
+#   5. select cron.schedule('notify-tick', '15 seconds',
+#        $$ select net.http_post(
+#             url := 'https://<PROJECT_REF>.supabase.co/functions/v1/notify-tick',
+#             headers := jsonb_build_object(
+#               'Content-Type', 'application/json',
+#               'Authorization', 'Bearer ' || (select decrypted_secret
+#                 from vault.decrypted_secrets where name = 'notify-tick-secret')),
+#             body := '{}'::jsonb,
+#             timeout_milliseconds := 10000) $$);
+# Sub-minute schedules need PostgreSQL >= 15.1.1.61 (this project: 17.11).
+# Rotation: vault.update_secret + `supabase secrets set` — job SQL never
+# changes. Match-tick's own job and schedule are NOT modified by this.
+
 [functions.admin-delete-user]
 enabled = true
 # Admin-signed JWT re-validated server-side (profiles.role must be 'admin');
