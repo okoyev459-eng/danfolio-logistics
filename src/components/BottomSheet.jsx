@@ -74,6 +74,9 @@ export default function BottomSheet({
 
   function pointerDown(e) {
     if (!dims.tSnaps.length || translateY === null) return
+    // Controls inside the header (chips, the primary action, links) keep
+    // their own taps; dragging starts on the rest of the grab area only.
+    if (e.target.closest?.('button, a, input, select, textarea, [role="button"]')) return
     e.currentTarget.setPointerCapture?.(e.pointerId)
     dragRef.current = {
       startY: e.clientY,

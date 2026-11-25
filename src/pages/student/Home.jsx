@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import CampusMap from '../../components/CampusMap.jsx'
+import BottomSheet from '../../components/BottomSheet.jsx'
 import { useAuth } from '../../lib/auth.jsx'
 import { supabase } from '../../lib/supabase'
 import { useGeolocation } from '../../lib/useGeolocation'
@@ -27,6 +28,11 @@ const KEKE_FRESH_MS = 90000
 
 const TABS = ['Home', 'Rides', 'Profile']
 
+// Booking sheet snap points, in visible pixels/fractions of the space above
+// the bottom nav: collapsed peek (greeting + destinations + Book a ride; the
+// map keeps the majority of the screen), mid (recent rides), expanded.
+const HOME_SNAPS = [270, 0.66, 0.9]
+
 export default function StudentHome() {
   const { session, signOut } = useAuth()
   const navigate = useNavigate()
@@ -35,6 +41,7 @@ export default function StudentHome() {
   const geo = useGeolocation()
 
   const [tab, setTab] = useState('Home')
+  const [sheetIndex, setSheetIndex] = useState(0)
   const [profile, setProfile] = useState(null)
   const [rides, setRides] = useState(null)
   const [reports, setReports] = useState([])
@@ -338,7 +345,14 @@ export default function StudentHome() {
       </div>
 
       {tab === 'Home' && (
-        <div className="sh-dock">
+        <div className="sh-sheetwrap">
+          <BottomSheet
+            snaps={HOME_SNAPS}
+            index={sheetIndex}
+            onIndexChange={setSheetIndex}
+            ariaLabel="Plan your ride"
+            header={
+              <>
           {activeRide && (
             <Link className="sh-active" to={`/student/ride/${activeRide.id}`}>
               <span>
@@ -374,11 +388,13 @@ export default function StudentHome() {
             )}
           </div>
 
-          <button type="button" className="sh-book" onClick={() => bookTo(null)}>
-            Book a ride
-          </button>
-
-          <div className="sh-panel">
+                <button type="button" className="sh-book" onClick={() => bookTo(null)}>
+                  Book a ride
+                </button>
+              </>
+            }
+          >
+            <div className="sh-panel">
             <h2>Recent rides</h2>
             {rides === null && (
               <div className="sh-skel" role="status">
@@ -404,6 +420,7 @@ export default function StudentHome() {
               </Link>
             ))}
           </div>
+          </BottomSheet>
         </div>
       )}
 

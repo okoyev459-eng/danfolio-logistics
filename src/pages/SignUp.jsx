@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import ResendLink from '../components/ResendLink.jsx'
 import { Brand, Icon } from './Landing.jsx'
 import './landing.css'
 import './auth.css'
@@ -113,7 +114,21 @@ export default function SignUp() {
             />
 
             {error && <div className="error" role="alert">{error}</div>}
-            {info && <div className="ok" role="status">{info}</div>}
+            {info && (
+              <>
+                <div className="ok" role="status">{info}</div>
+                {/* Verification state: the account exists but the address is
+                    unconfirmed, so offer another confirmation email with the
+                    same 60s cooldown as the reset screen. */}
+                <ResendLink
+                  onSend={() =>
+                    supabase.auth.resend({ type: 'signup', email: form.email.trim() })
+                  }
+                  label="Resend verification email"
+                  sentNotice="Verification email sent again. Check your inbox (and spam folder)."
+                />
+              </>
+            )}
 
             <button className="auth-btn" disabled={busy}>
               {busy ? 'Creating…' : 'Create account'}
