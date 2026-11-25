@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from './lib/auth.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
+import NotificationBridge from './components/NotificationBridge.jsx'
 import Landing from './pages/Landing.jsx'
 import Login from './pages/Login.jsx'
 import SignUp from './pages/SignUp.jsx'
@@ -53,7 +54,11 @@ const admin = (el) => <ProtectedRoute roles={['admin']}>{el}</ProtectedRoute>
 
 export default function App() {
   return (
-    <Routes>
+    <>
+      {/* Push/in-app notification glue — renders only with a session, so the
+          public landing page is untouched by it. */}
+      <NotificationBridge />
+      <Routes>
       <Route path="/" element={<RoleHome />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<SignUp />} />
@@ -82,6 +87,7 @@ export default function App() {
       <Route path="/admin/students" element={admin(<AdminStudents />)} />
       <Route path="/map" element={<ProtectedRoute roles={['student', 'keke', 'admin']}><StationMap /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+      </Routes>
+    </>
   )
 }

@@ -1,0 +1,101 @@
+/* NotificationBridge styles — scoped so the global `button` rule (full-width
+   56px) and Theo's page layouts are untouched. Uses the app's existing
+   tokens (index.css: --blue/--navy/--sky/--bg). */
+
+/* ---------- Foreground toasts (visual only — never system alerts) ---------- */
+.notify-toasts {
+  position: fixed;
+  top: max(14px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(420px, calc(100vw - 28px));
+  pointer-events: none;
+}
+
+.notify-toast {
+  background: #fff;
+  color: var(--navy);
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(30, 58, 138, .18);
+  border-left: 4px solid var(--blue);
+  padding: 12px 16px;
+  font-size: 14px;
+  line-height: 1.35;
+  animation: notify-toast-in .22s ease-out;
+}
+
+.notify-toast b { display: block; font-size: 15px; }
+.notify-toast span { color: #475569; font-size: 13.5px; }
+
+@keyframes notify-toast-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- Opt-in pill ---------- */
+.notify-optin {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(84px + env(safe-area-inset-bottom));
+  z-index: 90;
+  width: min(420px, calc(100vw - 28px));
+  background: var(--navy);
+  color: #fff;
+  border-radius: 18px;
+  box-shadow: 0 12px 32px rgba(30, 58, 138, .35);
+  padding: 14px 16px;
+  font-size: 14.5px;
+  line-height: 1.4;
+}
+
+.notify-optin-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.notify-optin button {
+  width: auto;
+  flex: 1;
+  height: 42px;
+  margin: 0;
+  line-height: 42px;
+  border-radius: 12px;
+  font-size: 15px;
+}
+
+.notify-optin button.ghost {
+  background: transparent;
+  color: #bfdbfe;
+  border: 1.5px solid #3b5bab;
+}
+
+/* ---------- Turn-off control (only while permission is granted) ---------- */
+.notify-toggle {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  z-index: 90;
+  width: auto;
+  height: 34px;
+  margin: 0;
+  line-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .92);
+  color: var(--navy);
+  border: 1.5px solid #cbd5e1;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .10);
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.notify-toggle:hover { background: #fff; border-color: var(--blue); }

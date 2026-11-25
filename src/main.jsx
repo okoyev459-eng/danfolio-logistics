@@ -11,6 +11,14 @@ import './motion.css'
 // If JS never runs, the class is absent and everything stays visible.
 document.documentElement.classList.add('has-js')
 
+// Register the service worker that DISPLAYS push notifications (public/sw.js).
+// Registering is silent and never prompts — subscription only happens from an
+// explicit tap in the app (src/lib/push.js → NotificationBridge). Failure is
+// non-fatal: the app works exactly as before without a service worker.
+if ('serviceWorker' in navigator && window.isSecureContext) {
+  navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {})
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>

@@ -127,7 +127,7 @@ Deno.serve(async (req) => {
             .maybeSingle(),
           admin
             .from('notifications')
-            .select('title, body, type, data, ride_id')
+            .select('title, body, type, data, ride_id, user_role')
             .eq('id', row.notification_id)
             .maybeSingle(),
         ])
@@ -155,6 +155,7 @@ Deno.serve(async (req) => {
               title: notification.title,
               body: notification.body,
               type: notification.type,
+              user_role: notification.user_role,
               ride_id: notification.ride_id,
               data: notification.data ?? {},
             }),

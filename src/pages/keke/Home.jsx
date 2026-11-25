@@ -241,6 +241,11 @@ export default function KekeHome() {
   const [online, setOnline] = useState(false)
   const [onlineSince, setOnlineSince] = useState(null)
   const [presenceBusy, setPresenceBusy] = useState(false)
+  // Mirrors of the live presence flags for the background/logout listener,
+  // which is registered once (deps [userId]) and must read current values.
+  // Assigned below, where `online` / `onTrip` are derived.
+  const onlineRef = useRef(false)
+  const onTripRef = useRef(false)
   const [offer, setOffer] = useState(null)
   // New-request notification opt-in (a tap, because browsers only grant
   // permission from a user gesture). 'unsupported' hides the control.
@@ -279,6 +284,9 @@ export default function KekeHome() {
   const unavailable = rider?.status === 'unavailable'
   const onTrip = rider?.status === 'on_trip'
   const atCapacity = activeTrips.length >= MAX_ACTIVE_RIDES
+  // Availability mirrors for the one-shot background listener (see above).
+  onlineRef.current = online
+  onTripRef.current = onTrip
   // Available for another offer: on duty (online, or on_trip with a fresh
   // heartbeat) and holding fewer than MAX_ACTIVE_RIDES rides. The server
   // enforces the same gate — this only mirrors it for the UI.
@@ -557,6 +565,12 @@ export default function KekeHome() {
   // Heartbeat while on duty — 'online' AND 'on_trip' rows both need a fresh
   // last_seen, because the dispatcher's 75s freshness filter applies to
   // riders carrying passengers too (a rider mid-trip can still take more).
+  //
+  // Preferred path is the keke_heartbeat RPC, which stamps last_seen with
+  // NOW() on the SERVER — the client can never backdate its own freshness.
+  // The legacy column write below stays as the fallback so a database
+  // without the RPC (or a transient RPC failure) keeps heartbeating exactly
+  // as it did before.
   useEffect(() => {
     if (!heartbeatOn || !userId) return
 
@@ -567,6 +581,20 @@ export default function KekeHome() {
         const position = await getPosition()
         if (stopped) return
 
+        const { data: rpcData, error: rpcError } = await supabase.rpc('keke_heartbeat', {
+          p_lat: position?.lat ?? null,
+          p_lng: position?.lng ?? null,
+        })
+
+        if (stopped) return
+
+        if (!rpcError && rpcData) {
+          if (rpcData.ok) setError('')
+          else setError('Heartbeat was not saved. Check that this rider account is on duty.')
+          return
+        }
+
+        // Fallback: legacy direct write (still granted at the column level).
         const update = { last_seen: new Date().toISOString() }
         if (position) {
           update.lat = position.lat
@@ -598,13 +626,91 @@ export default function KekeHome() {
     }
 
     heartbeat()
-    const timer = window.setInterval(heartbeat, 20000)
+    const timer = window.setInterval(heartbeat, 15000)
 
     return () => {
       stopped = true
       window.clearInterval(timer)
     }
   }, [heartbeatOn, userId])
+
+  // Background / logout → offline. A rider who leaves the app (tab hidden,
+  // page unloaded) must not keep receiving offers: dispatch only offers to
+  // 'online' rows, and flipping the row here makes that immediate instead
+  // of waiting for notify-tick's 45s expiry (which is the backstop when the
+  // unload request never lands). Never touches 'on_trip' (server-managed:
+  // accepted rides stay assigned) or 'unavailable' (a deliberate pause), and
+  // never touches another rider's row — the RPC uses auth.uid() only.
+  //
+  // queue_joined_at is deliberately KEPT on a background flip, so a quick
+  // app switch does not cost the queue spot; returning within
+  // AUTO_RESUME_MS resumes the same position seamlessly. Longer than that
+  // (or a reload) leaves the rider offline with an explicit notice — never
+  // silently back online while the user was away.
+  const AUTO_RESUME_MS = 30000
+  const autoOfflineAtRef = useRef(null)
+
+  useEffect(() => {
+    if (!userId) return undefined
+
+    async function goOfflineInBackground() {
+      if (!onlineRef.current || onTripRef.current) return
+      const { error } = await supabase.rpc('keke_set_presence', { p_status: 'offline' })
+      if (error) return // leave state alone; the 45s server sweep is the backstop
+      autoOfflineAtRef.current = Date.now()
+      setOnline(false)
+      setOnlineSince(null)
+      setRider((current) => (current ? { ...current, status: 'offline' } : current))
+    }
+
+    async function goOnlineAgain() {
+      // Direct column write (same path as the toggle): only ever flips a
+      // row that is still offline, so an admin change or a server-side
+      // transition is never clobbered.
+      const { data, error } = await supabase
+        .from('kekes')
+        .update({ status: 'online', last_seen: new Date().toISOString() })
+        .eq('id', userId)
+        .eq('status', 'offline')
+        .select('id, status')
+        .maybeSingle()
+
+      if (error || !data) return
+      setOnline(true)
+      setOnlineSince(Date.now())
+      setRider((current) => (current ? { ...current, status: 'online' } : current))
+      setNotice('Welcome back — you are online and can receive ride offers.')
+    }
+
+    function onVisibilityChange() {
+      if (document.visibilityState === 'hidden') {
+        goOfflineInBackground()
+        return
+      }
+      if (document.visibilityState !== 'visible') return
+      const offlineAt = autoOfflineAtRef.current
+      if (!offlineAt) return
+      autoOfflineAtRef.current = null
+      if (Date.now() - offlineAt <= AUTO_RESUME_MS) {
+        goOnlineAgain()
+      } else {
+        setNotice('You were offline while the app was in the background. Tap Go online to receive offers again.')
+      }
+    }
+
+    function onPageHide() {
+      // Best effort: on a real unload the request may not land — the 45s
+      // server sweep clears the row then. On a bfcache freeze it lands.
+      goOfflineInBackground()
+    }
+
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('pagehide', onPageHide)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('pagehide', onPageHide)
+    }
+  }, [userId])
 
   async function toggleOnline() {
     if (!userId || presenceBusy) return
@@ -701,6 +807,23 @@ export default function KekeHome() {
     setOnline(false)
     setOnlineSince(null)
     setNotice('You are marked unavailable. You will not receive offers until you go online again.')
+  }
+
+  // Signing out must not leave a ghost 'online' row that dispatch would go
+  // on offering to for the next 45 seconds. Same guard as the background
+  // flip: only an 'online' row is touched, never 'on_trip' (accepted rides
+  // stay assigned — the server releases the rider when the last trip ends)
+  // and never 'unavailable' (already paused). Best effort: if this request
+  // does not land, notify-tick's 45s expiry still clears the row.
+  async function handleSignOut() {
+    if (online && !onTrip) {
+      try {
+        await supabase.rpc('keke_set_presence', { p_status: 'offline' })
+      } catch {
+        /* expiry sweep is the backstop */
+      }
+    }
+    await signOut()
   }
 
   async function respond(response) {
@@ -2041,7 +2164,7 @@ export default function KekeHome() {
             </div>
           )}
 
-          <button className="keke-signout" type="button" onClick={signOut}>
+          <button className="keke-signout" type="button" onClick={handleSignOut}>
             Sign out
           </button>
         </section>

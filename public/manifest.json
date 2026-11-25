@@ -1,0 +1,16 @@
+{
+  "name": "Danfolio Ride",
+  "short_name": "Danfolio",
+  "description": "Book campus keke and shuttle rides with Danfolio Logistics — fixed fares, verified riders and live tracking.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#1e3a8a",
+  "icons": [
+    { "src": "/logo-mark.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "/favicon.png", "sizes": "180x180", "type": "image/png", "purpose": "maskable" }
+  ]
+}
