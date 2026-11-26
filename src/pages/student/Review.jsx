@@ -80,7 +80,7 @@ export default function Review() {
         ride_id: rideId,
         student_id: session.user.id,
         rating,
-        comment: comment.trim() || null,
+        comment: comment.trim().slice(0, 500) || null,
       })
 
     setBusy(false)
