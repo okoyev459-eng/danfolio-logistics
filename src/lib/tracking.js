@@ -93,6 +93,51 @@ export function normalizeFix(coords, { maxAccuracyM = trackingConfig().maxAccura
   }
 }
 
+// Should the student's blue dot adopt `next` over `previous`?
+//
+// Pure display filter for useGeolocation (unit-tested in tests/gpsFix.test.js):
+//   * first fix            → always accept;
+//   * real movement (≥10 m) → always accept — movement is new information,
+//     even if the accuracy circle got worse along the way;
+//   * equal/better accuracy → accept (a more accurate fix is exactly the
+//     update the spec asks the marker to wait for);
+//   * mild accuracy jitter  → accept (normal GPS noise);
+//   * MUCH worse accuracy + barely moved AND the previous fix is fresh
+//     → IGNORE: that is a noisy fix under a roof, and adopting it would
+//     drag the dot to a worse spot for no reason;
+//   * MUCH worse but the previous fix is older than `staleAfterMs`
+//     → accept anyway, because keeping an old position forever would make
+//     the dot itself stale — honesty beats jitter-avoidance.
+export function preferFix(
+  previous,
+  next,
+  { worseFactor = 2, minMoveM = 10, staleAfterMs = 10000 } = {},
+) {
+  if (!next) return false
+  if (!previous) return true
+
+  const moved = distanceMeters(previous, next)
+  if (moved !== null && moved >= minMoveM) return true
+
+  // Number(null) === 0, so null/undefined accuracy must read as UNKNOWN
+  // (NaN), never as a perfect 0 m circle (same rule as geo.validCoord).
+  const toAcc = (value) =>
+    value === null || value === undefined || value === '' ? NaN : Number(value)
+  const nextAcc = toAcc(next.accuracy)
+  const prevAcc = toAcc(previous.accuracy)
+  if (!Number.isFinite(nextAcc) || !Number.isFinite(prevAcc)) return true
+  if (nextAcc <= prevAcc) return true
+
+  const muchWorse = nextAcc > prevAcc * worseFactor + 20
+  if (!muchWorse) return true
+
+  const stamp = Number(previous.timestamp)
+  const age = Number.isFinite(stamp) && stamp > 0 ? Date.now() - stamp : Infinity
+  // Missing/unusable timestamp reads as "ancient" → accept, since we cannot
+  // judge freshness; a genuinely fresh previous fix rejects the noisy reading.
+  return age > staleAfterMs
+}
+
 // Publish pacing: first fix always goes out; afterwards require minInterval
 // AND a real move — except a heartbeat every heartbeatMs so a stationary
 // rider still refreshes updated_at (freshness must not look stale).
