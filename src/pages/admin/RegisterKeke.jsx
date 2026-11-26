@@ -39,15 +39,28 @@ export default function RegisterKeke() {
             <div className="adm-form-grid">
               <div>
                 <label>Full name</label>
-                <input value={form.full_name} onChange={set('full_name')} required />
+                <input value={form.full_name} onChange={set('full_name')} maxLength={80} required />
               </div>
               <div>
                 <label>Phone number (contact only)</label>
-                <input value={form.phone} onChange={set('phone')} />
+                <input
+                  value={form.phone}
+                  onChange={set('phone')}
+                  type="tel"
+                  inputMode="tel"
+                  maxLength={20}
+                  placeholder="+2348012345678"
+                />
               </div>
               <div>
                 <label>Keke number (cannot be changed later)</label>
-                <input value={form.keke_number} onChange={set('keke_number')} required />
+                <input
+                  value={form.keke_number}
+                  onChange={set('keke_number')}
+                  maxLength={24}
+                  placeholder="e.g. KEKE 214 UNI"
+                  required
+                />
               </div>
               <div>
                 <label>Password for the rider</label>
@@ -57,6 +70,7 @@ export default function RegisterKeke() {
                   onChange={set('password')}
                   required
                   minLength={6}
+                  maxLength={72}
                   autoComplete="new-password"
                 />
               </div>

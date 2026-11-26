@@ -26,6 +26,15 @@ const ACTIVE_STATUSES = ['searching', 'accepted', 'paid', 'arrived', 'on_trip']
 // Riders heartbeat every 20s; anything unseen for 90s is not shown as live.
 const KEKE_FRESH_MS = 90000
 
+// Raster formats only: an SVG can carry script and the avatars bucket is
+// public, so its MIME type is never accepted here. The stored extension comes
+// from this map, never from the uploaded filename.
+const AVATAR_TYPES = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+}
+
 const TABS = ['Home', 'Rides', 'Profile']
 
 // Booking sheet snap points, in visible pixels/fractions of the space above
@@ -182,8 +191,9 @@ export default function StudentHome() {
     e.target.value = ''
     if (!file || uploading) return
 
-    if (!file.type.startsWith('image/')) {
-      setUploadError('Please choose an image file.')
+    const ext = AVATAR_TYPES[file.type]
+    if (!ext) {
+      setUploadError('Please choose a JPG, PNG or WebP image.')
       return
     }
     if (file.size > 5 * 1024 * 1024) {
@@ -194,7 +204,6 @@ export default function StudentHome() {
     setUploading(true)
     setUploadError('')
 
-    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
     const path = `${session.user.id}/avatar.${ext}`
 
     const { error: uploadErr } = await supabase.storage

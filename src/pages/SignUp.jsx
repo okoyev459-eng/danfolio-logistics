@@ -47,13 +47,23 @@ export default function SignUp() {
     setBusy(true)
     setError('')
     setInfo('')
+
+    // The phone number is a real contact detail for the rider, so it is
+    // validated before it is stored in the account metadata.
+    const phone = form.phone.trim().replace(/[\s()-]/g, '')
+    if (!/^\+?\d{7,15}$/.test(phone)) {
+      setBusy(false)
+      setError('Enter a valid phone number, e.g. +2348012345678.')
+      return
+    }
+
     const { data, error } = await supabase.auth.signUp({
       email: form.email.trim(),
       password: form.password,
       options: {
         data: {
-          full_name: form.full_name.trim(),
-          phone: form.phone.trim(),
+          full_name: form.full_name.trim().slice(0, 80),
+          phone,
         },
       },
     })
@@ -107,6 +117,7 @@ export default function SignUp() {
               onChange={set('full_name')}
               placeholder="Your full name"
               autoComplete="name"
+              maxLength={80}
               required
             />
 
@@ -118,6 +129,7 @@ export default function SignUp() {
               onChange={set('email')}
               placeholder="you@school.edu"
               autoComplete="email"
+              maxLength={254}
               required
             />
 
@@ -129,6 +141,8 @@ export default function SignUp() {
               onChange={set('phone')}
               placeholder="+234"
               autoComplete="tel"
+              inputMode="tel"
+              maxLength={20}
               required
             />
 
@@ -141,6 +155,7 @@ export default function SignUp() {
               placeholder="Create a password"
               autoComplete="new-password"
               minLength={6}
+              maxLength={72}
               required
             />
 

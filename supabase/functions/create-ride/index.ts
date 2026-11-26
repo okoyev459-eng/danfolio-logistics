@@ -61,7 +61,8 @@ Deno.serve(async (req) => {
       return respond({ error: 'Only student accounts can book rides.' }, 403)
     }
 
-    const body = await req.json()
+    // A malformed body is a 400, not a 500 from the catch-all below.
+    const body = await req.json().catch(() => null)
     const { mode, from_id, to_id } = body ?? {}
 
     if (
