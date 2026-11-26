@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { toLoginEmail } from '../lib/kekeLogin'
+import { signInErrorMessage } from '../lib/emailErrors.js'
 import { Brand, Icon } from './Landing.jsx'
 import './landing.css'
 import './auth.css'
@@ -25,7 +26,10 @@ export default function Login() {
       password,
     })
     setBusy(false)
-    if (error) setError(error.message)
+    // Only a real sign-in failure is shown, and never the provider's raw
+    // text: signing in does not send an email, so an email-delivery error
+    // (for example a project-wide rate limit) must never appear here.
+    if (error) setError(signInErrorMessage(error))
     else navigate('/')
   }
 

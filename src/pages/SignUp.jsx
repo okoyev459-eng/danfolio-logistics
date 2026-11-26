@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import ResendLink from '../components/ResendLink.jsx'
+import { signUpErrorMessage } from '../lib/emailErrors.js'
 import { Brand, Icon } from './Landing.jsx'
 import './landing.css'
 import './auth.css'
@@ -11,10 +12,31 @@ import './auth.css'
 // needed: profiles.matric_no is nullable and the handle_new_user() trigger
 // reads it from metadata with ->>'matric_no' (NULL when absent), and every
 // display site already null-guards ('no matric' / '—' / conditional render).
+// Same rule as the reset screen: a refresh must not lose the "check your
+// email" panel, because that panel is what carries the 60 s resend countdown.
+const PENDING_KEY = 'danfolio.signup.pending'
+
+function readPendingEmail() {
+  try {
+    const email = window.sessionStorage.getItem(PENDING_KEY)
+    return email || ''
+  } catch {
+    return ''
+  }
+}
+
 export default function SignUp() {
-  const [form, setForm] = useState({ full_name: '', email: '', phone: '', password: '' })
+  const [pendingEmail] = useState(readPendingEmail)
+  const [form, setForm] = useState({
+    full_name: '',
+    email: pendingEmail,
+    phone: '',
+    password: '',
+  })
   const [error, setError] = useState('')
-  const [info, setInfo] = useState('')
+  const [info, setInfo] = useState(
+    pendingEmail ? 'Account created. Check your email to confirm, then sign in.' : '',
+  )
   const [busy, setBusy] = useState(false)
   const navigate = useNavigate()
 
@@ -36,9 +58,18 @@ export default function SignUp() {
       },
     })
     setBusy(false)
-    if (error) return setError(error.message)
+    // Never the raw provider text: a throttled confirmation email shows the
+    // calm "too many emails" wording instead of "email rate limit exceeded".
+    if (error) return setError(signUpErrorMessage(error))
     if (data.session) navigate('/')
-    else setInfo('Account created. Check your email to confirm, then sign in.')
+    else {
+      try {
+        window.sessionStorage.setItem(PENDING_KEY, form.email.trim())
+      } catch {
+        // Private mode: the panel still works for this page view.
+      }
+      setInfo('Account created. Check your email to confirm, then sign in.')
+    }
   }
 
   return (
@@ -124,8 +155,9 @@ export default function SignUp() {
                   onSend={() =>
                     supabase.auth.resend({ type: 'signup', email: form.email.trim() })
                   }
-                  label="Resend verification email"
-                  sentNotice="Verification email sent again. Check your inbox (and spam folder)."
+                  scope="signup"
+                  label="Resend email"
+                  sentNotice="Email sent again. Check your inbox and spam."
                 />
               </>
             )}
