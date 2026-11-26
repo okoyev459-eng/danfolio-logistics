@@ -25,7 +25,10 @@ function envNumber(key) {
 }
 
 // Thresholds (metres / ms) — env-overridable, documented in .env.example.
-export function trackingConfig() {
+export function trackingConfig(quality = 'fast') {
+  // Slow / saveData connection: publish no more than once every 8 s
+  // (field-test fix-pack) so a rider on the school network uses less data.
+  const slow = quality === 'slow'
   return {
     // A fix less accurate than this is too noisy to show as "the keke".
     maxAccuracyM: envNumber('VITE_TRACK_MAX_ACCURACY_M') ?? 100,
@@ -38,13 +41,14 @@ export function trackingConfig() {
     approachRadiusM: envNumber('VITE_APPROACH_RADIUS_M') ?? 400,
     // Publish pacing: at most one write per interval, never for tiny jitter,
     // but always refresh at least this often so freshness never looks dead.
-    // Task 6 (2026-11): tightened from 4 s / 15 s so a riding keke publishes
-    // every ~2.5 s while moving and never goes longer than 6 s between
-    // writes — inside the 2–5 s target for student map updates.
-    // (tests/tracking.test.js pins minIntervalMs > 2000 and heartbeatMs > 5000.)
-    minIntervalMs: 2500,
-    minDistanceM: 5,
-    heartbeatMs: 6000,
+    // Field-test fix-pack: publish only after BOTH a 5 s gap and a real
+    // 18 m move (whichever happens later), plus a heartbeat so a parked
+    // rider never looks stale. The 18 m threshold ignores GPS jitter on a
+    // poor signal without inventing movement. On a slow connection the pace
+    // drops to one write every 8 s or more.
+    minIntervalMs: slow ? 8000 : 5000,
+    minDistanceM: 18,
+    heartbeatMs: slow ? 16000 : 12000,
     // If the device watch has delivered NO fix for this long while rides are
     // active, the hook re-arms it (stop + start watchPosition) so a quietly
     // dead watch cannot leave the student staring at a frozen keke. Must sit

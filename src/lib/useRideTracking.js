@@ -54,8 +54,10 @@ function isMissingTableError(error) {
   return /could not find the table|relation .* does not exist|schema cache/i.test(message)
 }
 
-export function useRideTracking({ kekeId, rides = [] }) {
-  const config = useMemo(() => trackingConfig(), [])
+export function useRideTracking({ kekeId, rides = [], quality = 'fast' }) {
+  // Publish pacing follows the connection: on a slow / saveData link the
+  // rider writes at most once every 8 s (lib/tracking.js).
+  const config = useMemo(() => trackingConfig(quality), [quality])
   const rideIds = useMemo(() => trackableRideIds(rides), [rides])
   const rideIdsKey = rideIds.join(',')
 
@@ -69,6 +71,9 @@ export function useRideTracking({ kekeId, rides = [] }) {
   const rideIdsRef = useRef(rideIds)
   const prevIdsRef = useRef(rideIds)
   const publishedRef = useRef({ fix: null, at: null })
+  // Newest fix that could not be sent (offline / failed write). Only the most
+  // recent one is kept — a queue of stale positions would be useless data.
+  const pendingRef = useRef(null)
   const blockedRef = useRef(false)
   const phaseRef = useRef('idle')
   // Silence tracking for the watchdog: when the watch was last (re-)armed
@@ -113,6 +118,13 @@ export function useRideTracking({ kekeId, rides = [] }) {
     const ids = rideIdsRef.current
     if (!ids.length || !kekeId) return
 
+    // Offline: hold the newest fix and send it on reconnect instead of
+    // burning battery and data on requests that cannot succeed.
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      pendingRef.current = fix
+      return
+    }
+
     const rows = ids.map((rideId) => ({
       ride_id: rideId,
       keke_id: kekeId,
@@ -134,11 +146,14 @@ export function useRideTracking({ kekeId, rides = [] }) {
         stopWatch()
         return
       }
+      // Keep the newest fix for the next attempt rather than losing it.
+      pendingRef.current = fix
       setError(writeError.message)
       setPhaseSafe('error')
       return
     }
 
+    pendingRef.current = null
     publishedRef.current = { fix, at: Date.now() }
     setError('')
     setLastPublishedAt(new Date().toISOString())
@@ -276,6 +291,12 @@ export function useRideTracking({ kekeId, rides = [] }) {
   useEffect(() => {
     function handleOnline() {
       if (rideIdsRef.current.length === 0 || blockedRef.current) return
+      // Flush ONLY the newest fix captured while offline.
+      if (pendingRef.current) {
+        const queued = pendingRef.current
+        pendingRef.current = null
+        publish(queued)
+      }
       stopWatch()
       setPhaseSafe('starting')
       setRestartKey((k) => k + 1)

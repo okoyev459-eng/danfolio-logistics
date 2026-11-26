@@ -25,6 +25,14 @@ export const ROUTE_FALLBACK_NOTE =
 // (keeps the free OSRM demo server happy while GPS keeps ticking).
 export const REROUTE_MIN_MOVE_M = 30
 
+// Live-tracking re-route gate (field-test fix-pack). While a rider is moving,
+// the route is re-requested only when BOTH have passed: 10 s since the last
+// request AND 40 m of real movement. Keeps data use (and the routing
+// provider's rate limit) low on a weak connection, and stops the line from
+// being redrawn every few seconds while idle.
+export const LIVE_REROUTE_INTERVAL_MS = 10000
+export const LIVE_REROUTE_MIN_MOVE_M = 40
+
 function env(key) {
   try {
     return import.meta?.env?.[key]
@@ -102,6 +110,26 @@ export function shouldReroute(currentOrigin, lastRoutedOrigin, minMeters = REROU
   if (!validCoord(currentOrigin)) return false
   if (!validCoord(lastRoutedOrigin)) return true
   const moved = distanceMeters(lastRoutedOrigin, currentOrigin)
+  if (moved === null) return true
+  return moved >= minMeters
+}
+
+// Should a LIVE route be re-requested for a new origin? Unlike shouldReroute
+// this also enforces a minimum interval, so a fast-moving rider cannot fire
+// one routing request per GPS tick.
+export function shouldRerouteLive({
+  current,
+  lastOrigin,
+  now = Date.now(),
+  lastAt = 0,
+  minIntervalMs = LIVE_REROUTE_INTERVAL_MS,
+  minMeters = LIVE_REROUTE_MIN_MOVE_M,
+} = {}) {
+  if (!validCoord(current)) return false
+  if (!validCoord(lastOrigin)) return true
+  if (!Number.isFinite(lastAt) || lastAt <= 0) return true
+  if (now - lastAt < minIntervalMs) return false
+  const moved = distanceMeters(lastOrigin, current)
   if (moved === null) return true
   return moved >= minMeters
 }

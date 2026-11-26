@@ -3,7 +3,8 @@ import { useAuth } from '../../lib/auth.jsx'
 import { supabase } from '../../lib/supabase'
 import CampusMap from '../../components/CampusMap.jsx'
 import { distanceMeters, validCoord } from '../../lib/geo'
-import { shouldReroute } from '../../lib/routing'
+import { shouldRerouteLive } from '../../lib/routing'
+import { useNetworkQuality } from '../../lib/netQuality.js'
 import { positionFreshness } from '../../lib/tracking'
 import { useRideTracking } from '../../lib/useRideTracking'
 import {
@@ -984,7 +985,14 @@ export default function KekeHome() {
 
   // Live GPS publishing (spec section 6): real watchPosition fixes go to
   // ride_locations for every active trip — only while trips are active.
-  const tracking = useRideTracking({ kekeId: userId, rides: activeTrips })
+  // Connection-aware publishing: at most one GPS write every 8 s on a slow
+  // link (field-test fix-pack), with the newest fix queued while offline.
+  const networkQuality = useNetworkQuality()
+  const tracking = useRideTracking({
+    kekeId: userId,
+    rides: activeTrips,
+    quality: networkQuality,
+  })
 
   // One notification per request the moment a new offer lands (including a
   // request already waiting when the rider opens the app). The offer modal
@@ -1038,9 +1046,19 @@ export default function KekeHome() {
     const gate = tripRouteRef.current
     const destKey = String(desired.to?.id ?? `${desired.to?.lat},${desired.to?.lng}`)
     if (gate && gate.destKey === destKey && gate.route) {
-      if (!shouldReroute(desired.from, gate.origin)) return gate.route
+      // Restrained for a rider who is driving: 40 m AND 10 s between
+      // re-routes, never one request per GPS tick.
+      if (
+        !shouldRerouteLive({
+          current: desired.from,
+          lastOrigin: gate.origin,
+          lastAt: gate.at,
+        })
+      ) {
+        return gate.route
+      }
     }
-    tripRouteRef.current = { origin: desired.from, destKey, route: desired }
+    tripRouteRef.current = { origin: desired.from, destKey, route: desired, at: Date.now() }
     return desired
   }, [activeTrip?.status, riderPos, tripFrom, tripTo])
 

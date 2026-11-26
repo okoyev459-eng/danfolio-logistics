@@ -5,7 +5,14 @@ import CampusMap from '../../components/CampusMap.jsx'
 import { supabase } from '../../lib/supabase'
 import { useGeolocation } from '../../lib/useGeolocation'
 import { distanceMeters, formatDistance, validCoord } from '../../lib/geo'
-import { formatDuration, shouldReroute } from '../../lib/routing'
+import { formatDuration, shouldRerouteLive } from '../../lib/routing'
+import {
+  networkBanner,
+  nextRetryDelay,
+  pollIntervalMs,
+  shouldApplyPosition,
+  useNetworkQuality,
+} from '../../lib/netQuality.js'
 import { matchAnchor, useAnchors } from '../../lib/anchorCoords'
 import {
   estimateArrivalSeconds,
@@ -36,6 +43,35 @@ import './book.css'
 // page never writes rides/payments/tickets directly (spec section 4).
 
 const ACTIVE_STATUSES = ['searching', 'accepted', 'paid', 'arrived', 'on_trip']
+
+// Last-known ride state, kept per tab so a bad connection (or a refresh on
+// the school Wi-Fi) still shows the last real position and status — labelled
+// with its age — instead of an empty map. Nothing here is ever fabricated:
+// it is a copy of data that came from the server.
+const CACHE_VERSION = 1
+
+function cacheKey(rideId) {
+  return `danfolio.ride.v${CACHE_VERSION}.${rideId}`
+}
+
+function readRideCache(rideId) {
+  try {
+    const raw = window.sessionStorage.getItem(cacheKey(rideId))
+    if (!raw) return null
+    const data = JSON.parse(raw)
+    return data && typeof data === 'object' ? data : null
+  } catch {
+    return null
+  }
+}
+
+function writeRideCache(rideId, payload) {
+  try {
+    window.sessionStorage.setItem(cacheKey(rideId), JSON.stringify(payload))
+  } catch {
+    // Private mode / quota: the in-memory state still works for this page.
+  }
+}
 
 const STATUS_COPY = {
   searching: {
@@ -77,13 +113,21 @@ export default function Ride() {
   const navigate = useNavigate()
   const geo = useGeolocation()
 
-  const [ride, setRide] = useState(null)
+  // Connection quality drives how much work this screen does (field-test
+  // fix-pack): Realtime alone when healthy, one update every ~6 s on a slow
+  // link, and nothing at all while offline.
+  const quality = useNetworkQuality()
+  const online = quality !== 'offline'
+  const [cache] = useState(() => readRideCache(rideId))
+  const [ride, setRide] = useState(() => cache?.ride ?? null)
   const [ticket, setTicket] = useState(null)
   const [payment, setPayment] = useState(null)
   const [keke, setKeke] = useState(null)
-  const [kekePos, setKekesPos] = useState(null)
+  const [kekePos, setKekesPos] = useState(() => cache?.kekePos ?? null)
   const [error, setError] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => !cache?.ride)
+  // After 15 s a load never spins forever: the screen offers Retry instead.
+  const [timedOut, setTimedOut] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [confirmCancel, setConfirmCancel] = useState(false)
   // Notification opt-in (a tap, because browsers only grant permission from
@@ -91,7 +135,7 @@ export default function Ride() {
   const [notifPerm, setNotifPerm] = useState(() => notificationPermission())
   const [notice, setNotice] = useState('')
   const [eta, setEta] = useState(null)
-  const [rideLoc, setRideLoc] = useState(null) // ride_locations row (live GPS)
+  const [rideLoc, setRideLoc] = useState(() => cache?.rideLoc ?? null) // live GPS
   const [trackSource, setTrackSource] = useState('unknown') // 'live' | 'heartbeat'
   // Dedicated tracking view (spec §3): the Track-ride button expands the
   // map and re-frames the camera on the keke + pick-up, food-delivery style.
@@ -99,22 +143,26 @@ export default function Ride() {
   const mapApiRef = useRef(null) // CampusMap imperative handle (fitPoints)
   const mapWrapRef = useRef(null) // scroll target for the Track button
   const [now, setNow] = useState(Date.now())
-  const [online, setOnline] = useState(
-    typeof navigator === 'undefined' ? true : navigator.onLine,
-  )
 
-  // Network loss / reconnection: banner + honest "Connecting…" copy so a
-  // dropped connection is never mistaken for a dead keke.
-  useEffect(() => {
-    const goOnline = () => setOnline(true)
-    const goOffline = () => setOnline(false)
-    window.addEventListener('online', goOnline)
-    window.addEventListener('offline', goOffline)
-    return () => {
-      window.removeEventListener('online', goOnline)
-      window.removeEventListener('offline', goOffline)
+  // Adaptive pacing + reconnect bookkeeping (all refs: no re-renders).
+  const lastAppliedAtRef = useRef(0)
+  const pendingPosRef = useRef(null)
+  const channelAttemptRef = useRef(0)
+  const channelRetryRef = useRef(null)
+  const [channelKey, setChannelKey] = useState(0) // bump = resubscribe
+
+  // Apply a live position at most as often as the connection allows. On a
+  // slow link the newest one is held and flushed by the effect below; while
+  // offline nothing is applied (the cached fix stays on screen).
+  function applyLivePos(next) {
+    const at = Date.now()
+    if (!shouldApplyPosition({ now: at, lastAt: lastAppliedAtRef.current, quality })) {
+      pendingPosRef.current = next
+      return
     }
-  }, [])
+    lastAppliedAtRef.current = at
+    setRideLoc(next)
+  }
 
   const load = useCallback(async () => {
     const { data, error: rideError } = await supabase
@@ -199,12 +247,54 @@ export default function Ride() {
     load()
   }, [load])
 
-  // Live updates: ride row via Realtime, keke position while assigned.
+  // Never spin forever: after 15 s the screen offers a Retry button instead.
   useEffect(() => {
-    if (!rideId) return
+    if (!loading) {
+      setTimedOut(false)
+      return undefined
+    }
+    const timer = window.setTimeout(() => setTimedOut(true), 15000)
+    return () => window.clearTimeout(timer)
+  }, [loading])
+
+  // Keep the last real state for this tab (position + status + age).
+  useEffect(() => {
+    if (!ride) return
+    writeRideCache(rideId, {
+      ride,
+      rideLoc,
+      kekePos,
+      savedAt: Date.now(),
+    })
+  }, [rideId, ride, rideLoc, kekePos])
+
+  // Slow connection: flush the newest held position, at most once per
+  // interval. Paused while the tab is hidden — no timers doing work nobody
+  // can see.
+  useEffect(() => {
+    if (quality !== 'slow') return undefined
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return
+      const pending = pendingPosRef.current
+      if (!pending) return
+      const at = Date.now()
+      if (!shouldApplyPosition({ now: at, lastAt: lastAppliedAtRef.current, quality })) return
+      lastAppliedAtRef.current = at
+      pendingPosRef.current = null
+      setRideLoc(pending)
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [quality])
+
+  // Live updates: the ONE ride this student is part of. Reconnects on its own
+  // with exponential backoff (capped at 30 s) and re-fetches the latest state
+  // after every successful re-subscribe, so a dropped school network cannot
+  // leave a frozen screen.
+  useEffect(() => {
+    if (!rideId) return undefined
 
     const channel = supabase
-      .channel(`student-ride-${rideId}`)
+      .channel(`student-ride-${rideId}-${channelKey}`)
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'rides', filter: `id=eq.${rideId}` },
@@ -214,24 +304,80 @@ export default function Ride() {
           }
         }
       )
-      .subscribe()
-
-    // Polling fallback if a realtime event is missed.
-    const timer = window.setInterval(load, 4000)
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          const reconnected = channelAttemptRef.current > 0
+          channelAttemptRef.current = 0
+          // After a reconnect the events missed while offline are gone: pull
+          // the latest row once instead of pretending nothing happened.
+          if (reconnected) load()
+          return
+        }
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          const delay = nextRetryDelay(channelAttemptRef.current)
+          channelAttemptRef.current += 1
+          window.clearTimeout(channelRetryRef.current)
+          channelRetryRef.current = window.setTimeout(
+            () => setChannelKey((key) => key + 1),
+            delay,
+          )
+        }
+      })
 
     return () => {
-      window.clearInterval(timer)
+      window.clearTimeout(channelRetryRef.current)
       supabase.removeChannel(channel)
     }
-  }, [rideId, load])
+  }, [rideId, load, channelKey])
+
+  // Safety-net poll (Realtime is primary): slower on a weak link, none while
+  // offline, and paused entirely while the tab is hidden.
+  useEffect(() => {
+    if (!rideId) return undefined
+    const interval = pollIntervalMs(quality)
+    if (interval === null) return undefined
+
+    let timer = null
+    const tick = () => {
+      if (document.visibilityState !== 'visible') return
+      load()
+    }
+    const start = () => {
+      if (timer === null) timer = window.setInterval(tick, interval)
+    }
+    const stop = () => {
+      if (timer !== null) {
+        window.clearInterval(timer)
+        timer = null
+      }
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        tick()
+        start()
+      } else {
+        stop()
+      }
+    }
+
+    if (document.visibilityState === 'visible') start()
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      stop()
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [rideId, load, quality])
 
   // Track the assigned keke's position live.
   useEffect(() => {
     if (!ride?.keke_id || !ACTIVE_STATUSES.includes(ride.status)) return
 
-    const channel = supabase
-      .channel(`student-keke-pos-${ride.keke_id}`)
-      .on(
+    const channel = supabase.channel(`student-keke-pos-${ride.keke_id}`)
+
+    // The rider's public heartbeat is only a FALLBACK: while the per-ride
+    // live GPS is available we listen to that single feed instead of both.
+    if (trackSource !== 'live') {
+      channel.on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'kekes', filter: `id=eq.${ride.keke_id}` },
         (payload) => {
@@ -244,6 +390,7 @@ export default function Ride() {
           }
         }
       )
+    }
 
     // Live per-ride GPS — subscribed only once the table is confirmed to
     // exist, so a not-yet-applied migration can never break the heartbeat
@@ -262,7 +409,9 @@ export default function Ride() {
           }
           const row = payload.new
           if (row?.lat != null && row?.lng != null) {
-            setRideLoc({
+            // Applied through the adaptive gate: a slow connection shows one
+            // position every ~6 s, a healthy one updates immediately.
+            applyLivePos({
               lat: row.lat,
               lng: row.lng,
               accuracy: row.accuracy ?? null,
@@ -311,34 +460,54 @@ export default function Ride() {
   }, [rideActive, Boolean(effPos)])
 
   // Phase-aware road route (spec 5/7): keke → pick-up while the rider heads
-  // over, pick-up → destination once planned / on trip / finished. The
-  // origin only re-requests a road route after a real ≥30 m move
-  // (shouldReroute), so GPS ticks don't hammer the routing provider.
+  // over, pick-up → destination once planned / on trip. Cancelled, refunded
+  // and completed rides draw NO line — the ride is over.
+  //
+  // Re-routing is throttled to at most once every 10 s AND after 40 m of real
+  // movement (shouldRerouteLive), so a moving rider on the school network
+  // does not hammer the routing provider and the line never redraws while
+  // idle. Without a rider position no line is drawn (never a fake one).
   const routeRef = useRef(null)
   const routeLine = useMemo(() => {
     if (!ride) return null
 
     const phase = routePhaseFor(ride.status, Boolean(effPos))
+    if (!phase) {
+      routeRef.current = null
+      return null
+    }
+
     let desired = null
     if (phase === 'keke_to_pickup' && effPos && validCoord(ride.from)) {
       desired = { from: effPos, to: ride.from }
-    } else if (validCoord(ride.from) && validCoord(ride.to)) {
+    } else if (
+      (phase === 'trip' || phase === 'planned') &&
+      validCoord(ride.from) &&
+      validCoord(ride.to)
+    ) {
       desired = { from: ride.from, to: ride.to }
     }
 
     if (!desired) {
+      // Example: accepted, but the rider has published no position yet (or
+      // payment is still unverified, so the database shares nothing).
       routeRef.current = null
       return null
     }
 
     const destKey = String(desired.to?.id ?? `${desired.to.lat},${desired.to.lng}`)
     const gate = routeRef.current
-    if (gate && gate.destKey === destKey && gate.route && !shouldReroute(desired.from, gate.origin)) {
-      return gate.route // same object → the map does not re-fetch
+    if (gate && gate.destKey === destKey && gate.route) {
+      const unchanged = !shouldRerouteLive({
+        current: desired.from,
+        lastOrigin: gate.origin,
+        lastAt: gate.at,
+      })
+      if (unchanged) return gate.route // same object → no re-fetch, no animation
     }
-    routeRef.current = { origin: desired.from, destKey, route: desired }
+    routeRef.current = { origin: desired.from, destKey, route: desired, at: Date.now() }
     return desired
-  }, [ride?.status, effPos, ride?.from, ride?.to])
+  }, [ride?.status, effPos, ride?.from, ride?.to, now])
 
   const kekeMarkers = useMemo(
     () =>
@@ -412,7 +581,28 @@ export default function Ride() {
   if (loading) {
     return (
       <Layout title="My ride">
-        <p className="muted">{online ? 'Loading your booking…' : 'Connecting…'}</p>
+        {timedOut ? (
+          <div className="card">
+            <b>This is taking longer than usual</b>
+            <p className="muted">
+              {online
+                ? 'Your booking is not loading. Check your connection and try again.'
+                : 'You’re offline. Reconnect, then try again.'}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setTimedOut(false)
+                setLoading(true)
+                load()
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
+          <p className="muted">{online ? 'Loading your booking…' : 'Connecting…'}</p>
+        )}
       </Layout>
     )
   }
@@ -553,9 +743,24 @@ export default function Ride() {
           ← Back to home
         </button>
 
-        {!online && (
-          <div className="error" role="alert" style={{ marginTop: 12 }}>
-            You’re offline — live updates will resume when you reconnect.
+        {/* Calm network banner: what the screen is doing, not an error. The
+            last known position stays visible with its real age. */}
+        {networkBanner(quality) && (
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              marginTop: 12,
+              padding: '8px 12px',
+              borderRadius: 12,
+              border: '1px solid #BFDBFE',
+              background: '#EFF6FF',
+              color: '#1E3A8A',
+              fontSize: 13,
+            }}
+          >
+            {networkBanner(quality)}
+            {quality === 'offline' && effPos ? ` ${freshness.label}.` : ''}
           </div>
         )}
 
@@ -769,8 +974,8 @@ export default function Ride() {
             {arrivalEta && kekeProximity && (
               <p className="muted" style={{ fontSize: 13, marginTop: 4 }} role="status">
                 {arrivalEta.seconds <= 0
-                  ? 'Keke arriving now'
-                  : `Keke reaching you in ≈ ${formatDuration(arrivalEta.seconds)}${
+                  ? 'Rider is arriving now'
+                  : `Rider is ≈ ${formatDuration(arrivalEta.seconds)} away${
                       arrivalEta.source === 'road' ? ' by road' : ' (distance estimate)'
                     }`}
               </p>

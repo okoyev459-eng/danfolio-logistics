@@ -180,6 +180,12 @@ const KIND_COLORS = {
   destination: '#0EA5E9',
 }
 
+// The live ride line is a BRIGHT blue on a white casing, deliberately unlike
+// the campus roads (amber / slate), so "the rider coming to you" is readable
+// at a glance on a phone in daylight.
+const ROUTE_BLUE = '#1D6BFF'
+const ROUTE_CASING = '#FFFFFF'
+
 const KEKE_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
   'stroke-linecap="round" stroke-linejoin="round">' +
@@ -1088,6 +1094,10 @@ const CampusMap = forwardRef(function CampusMap(
     // properties are always created correct; otherwise just swap coordinates.
     const drawRoute = (line, fallback) => {
       const mode = fallback ? 'direct' : 'road'
+      // "First appearance" = the source did not exist yet, or the mode just
+      // flipped. Only that draws in; later re-routes after real movement just
+      // swap the geometry (no idle animation, no re-draw on every update).
+      const firstAppearance = !map.getSource(sourceId) || routeModeRef.current !== mode
       const data = {
         type: 'Feature',
         geometry: { type: 'LineString', coordinates: line },
@@ -1110,8 +1120,8 @@ const CampusMap = forwardRef(function CampusMap(
           source: sourceId,
           layout: { 'line-cap': 'round', 'line-join': 'round' },
           paint: {
-            'line-color': '#FFFFFF',
-            'line-width': fallback ? 7 : 9,
+            'line-color': ROUTE_CASING,
+            'line-width': fallback ? 7 : 10,
             'line-opacity': 0.95,
             ...(fallback ? { 'line-dasharray': [1.5, 1.5] } : {}),
           },
@@ -1122,8 +1132,8 @@ const CampusMap = forwardRef(function CampusMap(
           source: sourceId,
           layout: { 'line-cap': 'round', 'line-join': 'round' },
           paint: {
-            'line-color': fallback ? '#64748B' : '#2563EB',
-            'line-width': 5,
+            'line-color': fallback ? '#64748B' : ROUTE_BLUE,
+            'line-width': 5.5,
             'line-opacity': fallback ? 0.7 : 0.85,
             ...(fallback ? { 'line-dasharray': [1.5, 1.5] } : {}),
           },
@@ -1131,8 +1141,8 @@ const CampusMap = forwardRef(function CampusMap(
       }
       routeModeRef.current = mode
       setRouteNote(fallback ? ROUTE_FALLBACK_NOTE : '')
-      // Journey selected → draw it on (no-op when reduced-motion is set).
-      revealRoute(line)
+      // Draw the line on ONCE, when it first appears (reduced-motion skips it).
+      if (firstAppearance) revealRoute(line)
     }
 
     // Local campus road graph first (it knows the imported roads — the
