@@ -75,7 +75,7 @@ Deno.serve(async (req) => {
 
     const { data: fromLocation, error: fromError } = await adminClient
       .from('locations')
-      .select('id, kind, mode, active')
+      .select('id, name, mode, active')
       .eq('id', from_id)
       .maybeSingle()
 
@@ -83,20 +83,27 @@ Deno.serve(async (req) => {
 
     const { data: toLocation, error: toError } = await adminClient
       .from('locations')
-      .select('id, kind, mode, active')
+      .select('id, name, mode, active')
       .eq('id', to_id)
       .maybeSingle()
 
     if (toError) throw toError
 
-    const expectedFromKind = mode === 'drop' ? 'pickup' : 'station'
+    // One place list: any active place in the ride's mode can start or end a
+    // trip. `kind` used to be required here (pickup/station → destination),
+    // which forced the admin to enter every place twice and made the fare
+    // lists look split; the pickers and fares now share one place list, so
+    // the only rule is that the two ends are different places.
+    const samePlace =
+      Boolean(fromLocation && toLocation) &&
+      String(fromLocation.name).trim().toLowerCase() ===
+        String(toLocation.name).trim().toLowerCase()
 
     if (
       !fromLocation || !toLocation ||
       !fromLocation.active || !toLocation.active ||
       fromLocation.mode !== mode || toLocation.mode !== mode ||
-      fromLocation.kind !== expectedFromKind ||
-      toLocation.kind !== 'destination'
+      samePlace
     ) {
       return respond({ error: 'This route is unavailable.' }, 400)
     }

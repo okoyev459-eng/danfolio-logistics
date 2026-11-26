@@ -385,7 +385,8 @@ export default function AdminLocations() {
           <h2>{editingId ? 'Edit location' : 'Add a location'}</h2>
           <p className="muted" style={{ marginTop: -6, fontSize: 13 }}>
             The category groups this point under a heading in the student's
-            booking list. Name, category and coordinates are required.
+            booking list. Add each place once — it works as both a pick-up and
+            a destination. Name, category and coordinates are required.
           </p>
           <form onSubmit={save}>
             <div className="adm-form-grid">

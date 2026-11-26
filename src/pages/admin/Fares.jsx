@@ -1,13 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import AdminLayout from '../../components/AdminLayout.jsx'
 import { supabase } from '../../lib/supabase'
+import { buildPlacePool, placePoint } from '../../lib/placePool.js'
 
 // Admin fare management (spec section 4: fares are fixed per
 // mode + from + to, whole naira). Admins have an ALL policy on fares.
 export default function AdminFares() {
   const [fares, setFares] = useState(null)
   const [locations, setLocations] = useState([])
-  const [form, setForm] = useState({ mode: 'drop', from_id: '', to_id: '', amount: '' })
+  const [form, setForm] = useState({ mode: 'drop', from_key: '', to_key: '', amount: '' })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -32,8 +33,20 @@ export default function AdminFares() {
     load()
   }, [])
 
-  const froms = locations.filter((l) => l.mode === form.mode && l.kind !== 'destination')
-  const tos = locations.filter((l) => l.mode === form.mode && l.kind === 'destination')
+  // ONE list of places for both ends. Rows are grouped by name, so a place
+  // the admin entered as a pick-up and again as a destination shows once.
+  const pool = useMemo(() => buildPlacePool(locations, form.mode), [locations, form.mode])
+  const toPlaces = pool.filter((place) => place.key !== form.from_key)
+
+  // Changing the start drops a destination that would be the same place.
+  const chooseFrom = (e) => {
+    const fromKey = e.target.value
+    setForm((current) => ({
+      ...current,
+      from_key: fromKey,
+      to_key: current.to_key === fromKey ? '' : current.to_key,
+    }))
+  }
 
   async function save(e) {
     e.preventDefault()
@@ -43,9 +56,17 @@ export default function AdminFares() {
 
     const amount = Number(form.amount)
 
-    if (!form.from_id || !form.to_id) {
+    const fromPlace = pool.find((place) => place.key === form.from_key)
+    const toPlace = pool.find((place) => place.key === form.to_key)
+
+    if (!fromPlace || !toPlace) {
       setBusy(false)
       setError('Choose both a starting point and a destination.')
+      return
+    }
+    if (fromPlace.key === toPlace.key) {
+      setBusy(false)
+      setError('A fare needs two different places.')
       return
     }
     if (!Number.isSafeInteger(amount) || amount <= 0) {
@@ -54,10 +75,15 @@ export default function AdminFares() {
       return
     }
 
+    // The row that fits each role: a place may have a pick-up row and a
+    // destination row, and booking looks the fare up by those ids.
+    const fromPoint = placePoint(fromPlace, 'from')
+    const toPoint = placePoint(toPlace, 'to')
+
     const { error: writeError } = await supabase
       .from('fares')
       .upsert(
-        { mode: form.mode, from_id: form.from_id, to_id: form.to_id, amount },
+        { mode: form.mode, from_id: fromPoint.id, to_id: toPoint.id, amount },
         { onConflict: 'mode,from_id,to_id' }
       )
 
@@ -69,7 +95,7 @@ export default function AdminFares() {
     }
 
     setNotice('Fare saved.')
-    setForm({ mode: form.mode, from_id: '', to_id: '', amount: '' })
+    setForm({ mode: form.mode, from_key: '', to_key: '', amount: '' })
     load()
   }
 
@@ -127,27 +153,36 @@ export default function AdminFares() {
 
         <section className="adm-panel">
           <h2>Add or update a fare</h2>
+          <p className="muted" style={{ marginTop: -6, fontSize: 13 }}>
+            One list of campus places — pick the starting point, then any other
+            place. The destination list leaves out the place you chose as the
+            start, so a trip can’t begin and end at the same place.
+          </p>
           <form onSubmit={save}>
             <label>Mode</label>
             <select
               className="adm-select"
               value={form.mode}
-              onChange={(e) => setForm({ ...form, mode: e.target.value, from_id: '', to_id: '' })}
+              onChange={(e) => setForm({ ...form, mode: e.target.value, from_key: '', to_key: '' })}
             >
               <option value="drop">drop</option>
               <option value="along">along</option>
             </select>
 
             <label>From</label>
-            <select className="adm-select" value={form.from_id} onChange={set('from_id')}>
+            <select className="adm-select" value={form.from_key} onChange={chooseFrom}>
               <option value="">Choose…</option>
-              {froms.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              {pool.map((place) => (
+                <option key={place.key} value={place.key}>{place.name}</option>
+              ))}
             </select>
 
             <label>To (destination)</label>
-            <select className="adm-select" value={form.to_id} onChange={set('to_id')}>
+            <select className="adm-select" value={form.to_key} onChange={set('to_key')}>
               <option value="">Choose…</option>
-              {tos.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              {toPlaces.map((place) => (
+                <option key={place.key} value={place.key}>{place.name}</option>
+              ))}
             </select>
 
             <label>Fare (₦, whole naira)</label>

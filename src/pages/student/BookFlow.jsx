@@ -6,6 +6,7 @@ import { supabase } from '../../lib/supabase'
 import { useGeolocation } from '../../lib/useGeolocation'
 import { distanceMeters, formatDistance, validCoord } from '../../lib/geo'
 import { formatDuration, shouldReroute } from '../../lib/routing'
+import { buildPlacePool, placeKey, placePoint, placePoints } from '../../lib/placePool.js'
 import { positionFreshness, proximityState, estimateArrivalSeconds } from '../../lib/tracking'
 // ONE source of truth with start-payment — the fee shown here is the fee
 // charged at checkout (no drift between booking and payment).
@@ -147,7 +148,6 @@ export default function BookFlow({ initialMode = null }) {
   const mapRef = useRef(null)
 
   const isDrop = mode === 'drop'
-  const fromKind = isDrop ? 'pickup' : 'station'
 
   // ------------------------------------------------------------------
   // Locations (admin-managed pickup points / stations / destinations)
@@ -190,6 +190,10 @@ export default function BookFlow({ initialMode = null }) {
   // Quick chip / recent-ride deep link: the home screen passes the chosen
   // destination here so the student lands straight in step 2 with it filled.
   // ------------------------------------------------------------------
+  // One place list per ride type: every place can start a trip and any other
+  // place can end it, whichever role rows the admin happened to create.
+  const pool = useMemo(() => buildPlacePool(locations, mode), [locations, mode])
+
   const presetAppliedRef = useRef(false)
 
   useEffect(() => {
@@ -197,26 +201,30 @@ export default function BookFlow({ initialMode = null }) {
     if (!preset || presetAppliedRef.current || locState !== 'ready') return
 
     presetAppliedRef.current = true
-    const match = locations.find(
-      (l) => l.kind === 'destination' && l.name.toLowerCase() === String(preset).toLowerCase(),
-    )
+    const match = pool.find((place) => place.key === placeKey(preset))
 
     if (match) {
-      setTo(match)
+      setTo(placePoint(match, 'to'))
       navigate('/student/book', { state: null, replace: true })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routerLocation.state, locState, locations])
+  }, [routerLocation.state, locState, pool])
 
-  // A pre-selected destination only survives if it actually exists in the
-  // ride type the student just picked (Drop and Along have separate lists).
+  // A pre-selected destination only survives if that place exists in the ride
+  // type the student just picked; it is re-resolved to the row this role
+  // needs (a place may have a pick-up row and a destination row).
   useEffect(() => {
     if (choosingType || locState !== 'ready' || !to) return
-    if (locations.some((l) => l.id === to.id)) return
-    setTo(null)
-    setFare(null)
-    setFareState('idle')
-  }, [choosingType, locState, locations, to])
+    const place = pool.find((p) => p.key === placeKey(to.name))
+    if (!place) {
+      setTo(null)
+      setFare(null)
+      setFareState('idle')
+      return
+    }
+    const point = placePoint(place, 'to')
+    if (point && point.id !== to.id) setTo(point)
+  }, [choosingType, locState, pool, to])
 
   // ------------------------------------------------------------------
   // Rejoin an already-active booking on mount (e.g. returning to this page)
@@ -391,13 +399,16 @@ export default function BookFlow({ initialMode = null }) {
   // ------------------------------------------------------------------
   // Derived lists
   // ------------------------------------------------------------------
+  // Both pickers draw from the same place list; the destination list only
+  // leaves out the place already chosen as the pick-up.
   const froms = useMemo(
-    () => (choosingType ? [] : locations.filter((l) => l.kind === fromKind)),
-    [locations, fromKind, choosingType],
+    () => (choosingType ? [] : placePoints(locations, mode, 'from')),
+    [locations, mode, choosingType],
   )
   const tos = useMemo(
-    () => (choosingType ? [] : locations.filter((l) => l.kind === 'destination' && l.name !== from?.name)),
-    [locations, from?.name, choosingType],
+    () =>
+      choosingType ? [] : placePoints(locations, mode, 'to', placeKey(from?.name)),
+    [locations, mode, from?.name, choosingType],
   )
 
   // Nearest-first ordering once the student shares their location.
@@ -1325,14 +1336,17 @@ export default function BookFlow({ initialMode = null }) {
           userAccuracy={geo.accuracy}
           onSelect={(point) => {
             if (activeRide || choosingType) return
-            if (stage === 'from' && point.kind === fromKind) pickPickup(point)
-            else if (stage === 'to' && point.kind === 'destination') {
-              pickDestination(point)
-            } else if (stage === 'to' && point.kind === fromKind) {
-              // Tapping another pick-up point while choosing the destination
+            if (stage === 'from') {
+              pickPickup(point)
+              return
+            }
+            if (placeKey(point.name) === placeKey(from?.name)) {
+              // Tapping the chosen pick-up while choosing the destination
               // returns to step 1 with that point selected.
               pickPickup(point)
+              return
             }
+            pickDestination(point)
           }}
           onRouteInfo={setRouteEta}
           onFail={() => setMapFailed(true)}
