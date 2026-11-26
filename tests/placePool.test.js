@@ -105,3 +105,40 @@ describe('placePoints', () => {
     expect(placePoints(rows, 'drop', 'to', placeKey('Hostel A'))).toHaveLength(2)
   })
 })
+
+describe('regression: student pickers after choosing Drop or Along', () => {
+  // BookFlow asks for a mode's rows on the server (.eq('mode', mode)) and used
+  // to leave `mode` out of its SELECT, so every row arrived without one. The
+  // pool then dropped all of them and Drop/Along showed no locations at all.
+  const rowsWithoutModeColumn = [
+    { id: 'p-hosta', name: 'Hostel A', kind: 'pickup', category: 'Hostel', lat: 6.1, lng: 6.2 },
+    { id: 'p-lib', name: 'Library Gate', kind: 'pickup', category: 'Academic block', lat: 6.3, lng: 6.4 },
+    { id: 'd-main', name: 'Main Gate', kind: 'destination', category: 'Main gate', lat: 6.5, lng: 6.6 },
+  ]
+
+  it('keeps places when the query filtered by mode but did not select it', () => {
+    const pool = buildPlacePool(rowsWithoutModeColumn, 'drop')
+
+    expect(pool.map((p) => p.name)).toEqual(['Hostel A', 'Library Gate', 'Main Gate'])
+    expect(placePoints(rowsWithoutModeColumn, 'drop', 'from')).toHaveLength(3)
+    expect(placePoints(rowsWithoutModeColumn, 'drop', 'to')).toHaveLength(3)
+  })
+
+  it('still drops rows that carry a different mode', () => {
+    const pool = buildPlacePool(
+      [
+        { id: 'p-hosta', name: 'Hostel A', kind: 'pickup', mode: 'drop', lat: 6.1, lng: 6.2 },
+        { id: 's-chapel', name: 'Chapel Junction', kind: 'station', mode: 'along', lat: 6.7, lng: 6.8 },
+      ],
+      'drop',
+    )
+
+    expect(pool.map((p) => p.name)).toEqual(['Hostel A'])
+  })
+
+  it('keeps the pick-up/destination exclusion on those rows', () => {
+    const destinations = placePoints(rowsWithoutModeColumn, 'drop', 'to', placeKey('Hostel A'))
+
+    expect(destinations.map((p) => p.name)).toEqual(['Library Gate', 'Main Gate'])
+  })
+})

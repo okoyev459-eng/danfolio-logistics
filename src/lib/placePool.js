@@ -40,7 +40,10 @@ export function buildPlacePool(rows, mode = null) {
   const byKey = new Map()
 
   for (const row of rows ?? []) {
-    if (!row || (mode && row.mode !== mode)) continue
+    // A caller may leave the mode out of its SELECT when the query already
+    // filtered by mode on the server, so only drop a row that carries a
+    // different mode — never a row that simply didn't ask for the column.
+    if (!row || (mode && row.mode != null && row.mode !== mode)) continue
     const key = placeKey(row.name)
     if (!key) continue
 

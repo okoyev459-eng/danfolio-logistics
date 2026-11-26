@@ -160,7 +160,7 @@ export default function BookFlow({ initialMode = null }) {
 
       let request = supabase
         .from('locations')
-        .select('id, name, kind, category, lat, lng')
+        .select('id, name, kind, mode, category, lat, lng')
         .eq('active', true)
 
       // While the ride type is still open we load every active point so the
