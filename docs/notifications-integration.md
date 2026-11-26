@@ -1,9 +1,11 @@
-# Notifications + Rider Presence — Backend Integration Guide (Theo)
+# Notifications + Rider Presence — Integration Guide (Theo)
 
-**Status:** backend live after this branch is applied. Your files were **not**
-touched. Nothing below is required for rides/payments to keep working —
-notifications are additive; if you integrate nothing, the app behaves exactly
-as today (minus in-app toasts).
+**Status:** backend AND frontend are live on this branch. The frontend push
+wiring (service worker, manifest, subscription, bridge, presence hooks) was
+added here so notifications work end-to-end without you having to build it —
+the files touched are listed in §7 for your review. Nothing below is required
+for rides/payments to keep working — notifications are additive; the app
+behaves exactly as before plus toasts and push.
 
 ---
 
@@ -50,80 +52,51 @@ await supabase.from('notifications').update({ read_at: new Date().toISOString() 
 
 ---
 
-## 3. Web Push (service worker + VAPID)
+## 3. Web Push (service worker + VAPID) — DONE on this branch
 
-The backend **stores subscriptions and sends pushes**. The service worker +
-`pushManager.subscribe` are frontend-side (your domain):
+The backend **stores subscriptions and sends pushes**. The frontend half is
+already wired on this branch — no integration needed:
 
-```js
-// 1. Get the VAPID public key from your env (VITE_VAPID_PUBLIC_KEY —
-//    set it in Vercel; the private key never leaves Supabase).
-// 2. Register your SW (public/sw.js) and subscribe:
-const reg = await navigator.serviceWorker.register('/sw.js')
-const sub = await reg.pushManager.subscribe({
-  userVisibleOnly: true,
-  applicationServerKey: urlBase64ToUint8Array(VITE_VAPID_PUBLIC_KEY),
-})
-// 3. Persist it (upsert = re-subscribe after key rotation is safe):
-await supabase.from('push_subscriptions').upsert({
-  endpoint: sub.endpoint,
-  p256dh: sub.toJSON().keys.p256dh,
-  auth: sub.toJSON().keys.auth,
-}, { onConflict: 'endpoint' })
-```
+| Piece | File | What it does |
+|---|---|---|
+| Service worker | `public/sw.js` | displays pushes, routes taps by `user_role` (`/keke`, `/student/ride/:id`, `/admin`), focuses an existing window |
+| Manifest | `public/manifest.json` + link in `index.html` | Android Chrome requires an installed web app for Web Push |
+| Subscription manager | `src/lib/push.js` | registers the SW, subscribes with `VITE_VAPID_PUBLIC_KEY`, upserts on `endpoint`, rolls back on failed save |
+| Bridge | `src/components/NotificationBridge.jsx` (mounted in `App.jsx`) | silent re-sync on login, realtime in-app toasts (visual only), opt-in pill, turn-off control |
+| SW registration | `src/main.jsx` | registers `/sw.js` on startup (silent — permission only ever requested from the Enable tap) |
 
-`sw.js` handler:
-
-```js
-self.addEventListener('push', (e) => {
-  const { title, body, data } = e.data.json()
-  e.waitUntil(self.registration.showNotification(title, {
-    body, data,                       // tap → navigate to /ride/{ride_id}
-    icon: '/icon.png',
-  }))
-})
-```
-
-Ask permission **after** a user gesture, not on page load.
+If you rebuild any of this: permission must only be requested from a user
+gesture, the toast layer must never call `new Notification()` (the SW is the
+single source of system alerts — otherwise everything double-pops), and the
+VAPID **private** key must never appear in frontend code (covered by
+`tests/push-client.test.js`).
 
 ---
 
-## 4. Rider presence (Home.jsx migration — when convenient)
+## 4. Rider presence — DONE on this branch
 
-Today Home.jsx heartbeats every 20s with a direct `kekes` UPDATE. That still
-works (the column grant is untouched), but the server-stamped RPC is
-strictly better and is what the 45s expiry is tuned for:
+`src/pages/keke/Home.jsx` now uses the server-stamped RPCs (the legacy
+direct write is kept as fallback, and the column grant is untouched):
 
-```js
-// heartbeat — replace the .from('kekes').update(...) block:
-const { data } = await supabase.rpc('keke_heartbeat', { p_lat: lat, p_lng: lng })
-// data = { ok, status, last_seen }  (ok:false + 'not_on_duty' if offline)
-
-// go online / offline / unavailable — replace the toggle's status write:
-await supabase.rpc('keke_set_presence', { p_status: nextOnline ? 'online' : 'offline' })
-```
-
-**Add these two hooks (important):**
-
-```js
-// background / tab hidden → stop being offerable immediately:
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden' && online && !onTrip)
-    supabase.rpc('keke_set_presence', { p_status: 'offline' })
-})
-// logout → offline before the session dies:
-await supabase.rpc('keke_set_presence', { p_status: 'offline' })
-await supabase.auth.signOut()
-```
+- **Heartbeat:** every **15s** via `keke_heartbeat(lat?, lng?)` — falls back
+  to the old `kekes` UPDATE if the RPC is unavailable.
+- **Background → offline:** `visibilitychange` (hidden) and `pagehide` call
+  `keke_set_presence('offline')`, guarded by `online && !onTrip` — never
+  `on_trip`, never another rider's row. `queue_joined_at` is kept, so a
+  quick app switch does not cost the queue spot; returning within **30s**
+  resumes seamlessly, longer shows an explicit "tap Go online" notice
+  (never silently back online while the user was away).
+- **Logout → offline:** `handleSignOut` flips `online` rows offline
+  (best-effort) before the session dies.
 
 Timing model (all server-side, no client timers involved):
 
 | Event | Rule |
 |---|---|
-| Heartbeat | every **15s** foreground (20s also fine — both < 45s) |
+| Heartbeat | every **15s** foreground (both paths < 45s) |
 | Offline expiry | `last_seen` older than **45s** → `notify-tick` flips `online → offline` (only ever `online`, never `on_trip`) |
 | Dispatch | already ignores riders not seen in **75s** (unchanged) |
-| Background/logout | call `keke_set_presence('offline')` (above) |
+| Background/logout | `keke_set_presence('offline')` (wired in Home.jsx) |
 
 Offline riders get **no** `new_ride_request` notifications — dispatch never
 offers to them in the first place, and their pending offers stop at the next
@@ -149,3 +122,31 @@ tick.
 | `VAPID_SUBJECT` | Function env | `mailto:` contact for VAPID |
 
 One-time cron setup SQL: `supabase/config.toml` → `[functions.notify-tick]`.
+
+## 7. Files touched on this branch (for your review)
+
+**New (all notification-owned):**
+
+| File | Role |
+|---|---|
+| `supabase/migrations/20261124170000_notifications.sql` | tables, RLS, 3 triggers, presence RPCs (applied to live DB) |
+| `supabase/functions/notify-tick/index.ts` | 45s sweep + Web Push delivery (pg_cron @15s) |
+| `public/sw.js` | displays pushes, tap routing |
+| `public/manifest.json` | installability (Android Chrome push) |
+| `src/lib/push.js` | subscription manager |
+| `src/components/NotificationBridge.jsx` + `notification-bridge.css` | toasts, opt-in pill, turn-off |
+| `tests/notifications.test.js`, `tests/push-client.test.js` | drift tests (241 pass) |
+| `docs/notifications-integration.md` | this file |
+
+**Existing files edited (surgical, additive only):**
+
+| File | Change |
+|---|---|
+| `src/App.jsx` | mounts `<NotificationBridge />` (renders nothing without a session) |
+| `src/main.jsx` | registers `/sw.js` (silent, non-fatal on failure) |
+| `index.html` | one `<link rel="manifest">` |
+| `src/pages/keke/Home.jsx` | RPC-first heartbeat (15s), background/logout offline hooks, `handleSignOut` — toggle/queue/trip logic untouched |
+| `supabase/config.toml` | `[functions.notify-tick]` section |
+
+Dispatch, match-tick, capacity, decline flow, cancel/refund paths: **no
+changes**.
